@@ -22,9 +22,6 @@ This file builds on the original `parse_jacoco.py` in two ways:
        * branch_density                 (lightweight complexity proxy)
        * weighted_line_coverage         (instruction-density-weighted; an
                                          SFC-style approximation)
-       * complexity_adjusted_coverage   (complexity-penalty proxy; displayed
-                                         as a standalone indicator only —
-                                         NOT included in quality_score)
        * quality_score                  (the composite UI-facing number)
 
 DESIGN CHOICES THAT MATTER FOR THE THESIS
@@ -56,7 +53,7 @@ import os
 import csv
 import math
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -403,40 +400,12 @@ def metric_weighted_line_coverage(lines: list[LineHit]) -> float:
     return round(covered_instr / total_instr * 100, 2)
 
 
-# --- Metric 5: Complexity-adjusted coverage ------------------------------
-
-def metric_complexity_adjusted_coverage(counters: dict[str, Counter]) -> float:
-    """
-    Complexity-adjusted coverage: a coverage score scaled down by a
-    cyclomatic-complexity penalty.
-
-    Inspired by Zakeri-Nasrabadi and Parsa (2022)'s Coverageability
-    concept, which captures testability as the ratio of achieved
-    coverage to test-suite size. Since JaCoCo does not record
-    test-suite size, we substitute cyclomatic complexity as an
-    effort proxy: more complex classes represent greater testing
-    effort and so warrant a stronger penalty.
-
-    NOTE: This is NOT a reimplementation of the paper's
-    Coverageability metric. The paper defines Coverageability via
-    a 296-feature ML model trained on labels computed from runtime
-    test-suite size — neither of which is available from JaCoCo.
-    Our metric is a JaCoCo-derivable proxy informed by the same
-    testability intuition.
-    """
-    base = metric_mean_line_branch(counters) / 100.0
-    cc = counters.get("COMPLEXITY")
-    cc_total = cc.total if cc else 0
-    penalty = 1.0 / (1.0 + math.log1p(cc_total))
-    return round(base * penalty * 100, 2)
-
-
-# --- Metric 6: Composite quality score -----------------------------------
+# --- Metric 5: Composite quality score -----------------------------------
 #
-# Three-metric composite. complexity_adjusted_coverage is intentionally
-# excluded: its log-penalty formula produces values that are structurally
-# low for any non-trivial codebase (a project with average class CC≈50 and
-# 95% coverage scores ~19%), making it uninformative in a composite and
+# Three-metric composite. Weights sum to 1.0. For the thesis sensitivity
+# chapter, vary each ±0.10 and report whether package rankings hold.
+#
+# Weights sum to 1.0.
 # confusing to readers unfamiliar with the calibration. It is retained as
 # a standalone display metric so the complexity burden is still visible.
 #
@@ -670,7 +639,7 @@ def compute_hotspots(class_rows: list[dict]) -> dict:
         return round(c["line_pct"] - c["weighted_line_cov"], 1)
 
     shallow = sorted(
-        [c for c in eligible if _gap(c) > 5],
+        [c for c in eligible if _gap(c) > 10],
         key=_gap,
         reverse=True,
     )[:1000]
@@ -999,7 +968,6 @@ def sensitivity_analysis(class_rows: list[dict]) -> dict:
 
 if __name__ == "__main__":
     import sys
-    import json
 
     if len(sys.argv) < 2:
         # Default paths matching your existing setup; override on CLI.
