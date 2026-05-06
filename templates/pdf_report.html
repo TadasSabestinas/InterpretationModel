@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<style>
+/* ── Page layout ─────────────────────────────────────────────── */
+@page {
+  size: A4;
+  margin: 2.2cm 2cm 2.5cm 2cm;
+}
+
+/* xhtml2pdf footer via @page is limited; we use a fixed footer div */
+body {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 9.5pt;
+  line-height: 1.5;
+  color: #1a1a1a;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Typography ──────────────────────────────────────────────── */
+h1 { font-size: 20pt; font-weight: bold; margin: 0 0 2pt 0; }
+h2 { font-size: 13pt; font-weight: bold; margin: 18pt 0 7pt 0;
+     border-bottom: 1.5px solid #1a1a1a; padding-bottom: 3pt; }
+h3 { font-size: 10.5pt; font-weight: bold; margin: 12pt 0 4pt 0; }
+
+p  { margin: 3pt 0 7pt 0; }
+
+/* ── Header ──────────────────────────────────────────────────── */
+.report-header {
+  border-bottom: 2px solid #1a1a1a;
+  padding-bottom: 10pt;
+  margin-bottom: 16pt;
+}
+.report-eyebrow {
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.8pt;
+  color: #666;
+  margin-bottom: 4pt;
+}
+.report-date {
+  font-size: 8.5pt;
+  color: #666;
+  margin-top: 4pt;
+}
+
+/* ── Score block ─────────────────────────────────────────────── */
+.score-row { margin: 6pt 0 4pt 0; }
+.score-number {
+  font-size: 34pt;
+  font-weight: bold;
+  font-family: Georgia, serif;
+  display: inline;
+}
+.grade-pill {
+  font-size: 13pt;
+  font-weight: bold;
+  border: 1.5px solid #1a1a1a;
+  padding: 1pt 5pt;
+  display: inline;
+  margin-left: 6pt;
+}
+.grade-A { border-color: #16a34a; color: #16a34a; }
+.grade-B { border-color: #059669; color: #059669; }
+.grade-C { border-color: #d97706; color: #d97706; }
+.grade-D { border-color: #ea580c; color: #ea580c; }
+.grade-F { border-color: #dc2626; color: #dc2626; }
+
+/* ── Summary stats strip ─────────────────────────────────────── */
+.stats-strip { margin: 8pt 0 4pt 0; }
+.stats-strip table { width: auto; }
+.stats-strip td {
+  padding: 0 16pt 0 0;
+  border: none;
+  vertical-align: top;
+}
+.stat-value {
+  font-family: "Courier New", monospace;
+  font-size: 13pt;
+  font-weight: bold;
+  display: block;
+}
+.stat-label {
+  font-size: 7.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.5pt;
+  color: #666;
+  display: block;
+}
+
+/* ── Metrics grid ────────────────────────────────────────────── */
+.metrics-grid table { width: 100%; }
+.metrics-grid td {
+  width: 25%;
+  border: 0.5px solid #d0d0d0;
+  padding: 5pt 7pt;
+  vertical-align: top;
+}
+.metric-label {
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: 0.5pt;
+  color: #666;
+}
+.metric-value {
+  font-family: "Courier New", monospace;
+  font-size: 13pt;
+  font-weight: bold;
+}
+
+/* ── Generic data tables ─────────────────────────────────────── */
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8.5pt;
+  margin: 4pt 0 10pt 0;
+}
+table.data th {
+  text-align: left;
+  font-weight: bold;
+  border-bottom: 1.5px solid #1a1a1a;
+  padding: 4pt 5pt;
+  background-color: #f5f5f5;
+}
+table.data td {
+  padding: 3pt 5pt;
+  border-bottom: 0.5px solid #e4e4e4;
+  vertical-align: top;
+}
+table.data tr:last-child td { border-bottom: none; }
+.mono { font-family: "Courier New", monospace; }
+.right { text-align: right; }
+.center { text-align: center; }
+.muted { color: #777; font-size: 7.5pt; }
+
+/* ── Distribution bars ───────────────────────────────────────── */
+.dist-table { width: 100%; border-collapse: collapse; margin: 4pt 0; }
+.dist-table td { padding: 2pt 4pt; border: none; vertical-align: middle; }
+.dist-label-cell {
+  width: 42pt;
+  font-family: "Courier New", monospace;
+  font-size: 8pt;
+  color: #555;
+  text-align: right;
+}
+.dist-bar-cell { }
+.dist-bar-bg {
+  background-color: #eeeeee;
+  height: 10pt;
+  border-radius: 1pt;
+}
+.dist-bar-fill {
+  height: 10pt;
+  border-radius: 1pt;
+  display: block;
+}
+.dist-count-cell {
+  width: 20pt;
+  font-family: "Courier New", monospace;
+  font-size: 8pt;
+  color: #333;
+  text-align: right;
+}
+.dist-sample-cell {
+  font-size: 7.5pt;
+  color: #888;
+  padding-left: 6pt;
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.report-footer {
+  margin-top: 20pt;
+  padding-top: 6pt;
+  border-top: 0.5px solid #ccc;
+  font-size: 7.5pt;
+  color: #888;
+  text-align: center;
+}
+
+/* ── Page break ──────────────────────────────────────────────── */
+.page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════ HEADER ════════════════ -->
+<div class="report-header">
+  <div class="report-eyebrow">Coverage Quality Report</div>
+  <h1>{{ project.project_name }}</h1>
+  <div class="report-date">Generated {{ generated_at }}</div>
+</div>
+
+<!-- ════════════════ PROJECT SUMMARY ════════════════ -->
+<h2>Project Summary</h2>
+
+<div class="score-row">
+  <span class="score-number">{{ project.quality_score }}</span>
+  <span class="grade-pill grade-{{ project.quality_grade }}">{{ project.quality_grade }}</span>
+</div>
+<p class="muted">Composite quality score (0–100) — weighted average of three derived coverage metrics.</p>
+
+<div class="stats-strip">
+  <table><tr>
+    <td><span class="stat-value">{{ project.n_packages }}</span><span class="stat-label">Packages</span></td>
+    <td><span class="stat-value">{{ n_classes }}</span><span class="stat-label">Classes</span></td>
+    <td><span class="stat-value">{{ project.complexity_total }}</span><span class="stat-label">Total complexity</span></td>
+  </tr></table>
+</div>
+
+<h3>Coverage Metrics</h3>
+<div class="metrics-grid">
+  <table><tr>
+    <td>
+      <div class="metric-label">Line coverage</div>
+      <div class="metric-value">{{ project.line_pct }}%</div>
+    </td>
+    <td>
+      <div class="metric-label">Branch coverage</div>
+      <div class="metric-value">{{ project.branch_pct }}%</div>
+    </td>
+    <td>
+      <div class="metric-label">Instruction coverage</div>
+      <div class="metric-value">{{ project.instruction_pct }}%</div>
+    </td>
+    <td>
+      <div class="metric-label">Method coverage</div>
+      <div class="metric-value">{{ project.method_pct }}%</div>
+    </td>
+  </tr><tr>
+    <td>
+      <div class="metric-label">Mean (Line, Branch)</div>
+      <div class="metric-value">{{ project.mean_line_branch }}%</div>
+    </td>
+    <td>
+      <div class="metric-label">Geometric mean</div>
+      <div class="metric-value">{{ project.coverage_geo_mean }}%</div>
+    </td>
+    <td>
+      <div class="metric-label">Weighted line cov.</div>
+      <div class="metric-value">{{ project.weighted_line_cov }}%</div>
+    </td>
+    <td></td>
+  </tr></table>
+</div>
+
+<!-- ════════════════ RISKY AREAS ════════════════ -->
+<h2>Risky Areas</h2>
+<p class="muted">Top 5 classes per risk category. Classes with cyclomatic complexity &lt; 3 are excluded as trivial.</p>
+
+{% set categories = [
+  ('coverage_gap_risk',   'Coverage Gap Risk',    'Low quality score on complex code — highest combined risk.'),
+  ('branch_blind_spots',  'Branch Blind Spots',   'High line coverage but low branch coverage — tests reach code but skip decisions.'),
+  ('shallow_tests',       'Shallow Tests',        'Line coverage significantly exceeds instruction-weighted coverage — tests touch lines but skip bytecode work.'),
+  ('untested_complexity', 'Untested Complexity',  'High cyclomatic complexity with poor overall quality — large, under-tested code paths.'),
+] %}
+
+{% for key, label, description in categories %}
+{% set entries = hotspots.get(key, [])[:5] %}
+<h3>{{ label }}</h3>
+<p class="muted">{{ description }}</p>
+{% if entries %}
+<table class="data">
+  <thead><tr>
+    <th style="width:28%">Class</th>
+    <th style="width:28%">Package</th>
+    <th>Finding</th>
+    <th style="width:22pt" class="center">Grade</th>
+  </tr></thead>
+  <tbody>
+    {% for e in entries %}
+    <tr>
+      <td class="mono">{{ e.class_name }}</td>
+      <td class="muted mono">{{ e.package_name.split('.')[-3:] | join('.') }}</td>
+      <td>{{ e.reason }}</td>
+      <td class="center grade-{{ e.quality_grade }}"><strong>{{ e.quality_grade }}</strong></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted" style="font-style:italic;">No classes in this category.</p>
+{% endif %}
+{% endfor %}
+
+<!-- ════════════════ QUALITY DISTRIBUTION ════════════════ -->
+<h2 class="page-break">Quality Distribution</h2>
+<p class="muted">
+  Number of classes per 10-point quality score bucket. Bars are proportional to the
+  largest bucket. Sample class names shown where available.
+</p>
+
+<table class="dist-table">
+  {% for b in distribution %}
+  <tr>
+    <td class="dist-label-cell">{{ b.bucket_label }}</td>
+    <td class="dist-bar-cell">
+      <div class="dist-bar-bg">
+        <div class="dist-bar-fill"
+             style="width:{{ [(b.count / max_count * 100)|round|int, 100]|min }}%; background-color: hsl({{ (loop.index0 / 9 * 120)|round|int }}, 52%, 44%);"></div>
+      </div>
+    </td>
+    <td class="dist-count-cell">{{ b.count }}</td>
+    <td class="dist-sample-cell">
+      {% if b.sample_class_names %}{{ b.sample_class_names | join(', ') }}{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<!-- ════════════════ ALL PACKAGES ════════════════ -->
+<h2 class="page-break">All Packages</h2>
+<p class="muted">Sorted by quality score ascending (worst first). All percentage values rounded to two decimal places.</p>
+
+<table class="data">
+  <thead><tr>
+    <th>Package</th>
+    <th class="right" style="width:24pt">Cls</th>
+    <th class="right" style="width:32pt">Line%</th>
+    <th class="right" style="width:36pt">Branch%</th>
+    <th class="right" style="width:40pt">Mean(L,B)</th>
+    <th class="right" style="width:38pt">Wtd Line</th>
+    <th class="right" style="width:34pt">Score</th>
+    <th class="center" style="width:22pt">Grd</th>
+  </tr></thead>
+  <tbody>
+    {% for p in packages %}
+    <tr>
+      <td>
+        <span class="mono" style="font-size:7.5pt;">{{ p.package_name }}</span>
+      </td>
+      <td class="right mono">{{ p.n_classes }}</td>
+      <td class="right mono">{{ p.line_pct }}</td>
+      <td class="right mono">{{ p.branch_pct }}</td>
+      <td class="right mono">{{ p.mean_line_branch }}</td>
+      <td class="right mono">{{ p.weighted_line_cov }}</td>
+      <td class="right mono"><strong>{{ p.quality_score }}</strong></td>
+      <td class="center grade-{{ p.quality_grade }}"><strong>{{ p.quality_grade }}</strong></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- ════════════════ FOOTER ════════════════ -->
+<div class="report-footer">
+  Generated by Coverage Interpretation Model &mdash; Bachelor&rsquo;s Thesis Tool
+</div>
+
+</body>
+</html>

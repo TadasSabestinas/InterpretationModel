@@ -1,0 +1,82 @@
+/* style.css — extends Tailwind with custom palette and refinements */
+
+/* Tailwind config via CDN config block */
+/* (we set it at the end of this file via a small JS snippet, since CDN
+   Tailwind takes config from window.tailwind.config) */
+
+:root {
+  --color-paper: #f7f4ed;        /* off-white, warm */
+  --color-ink:   #1a1a1a;        /* near-black */
+  --color-accent: #b8543d;       /* terracotta — distinctive, warm, serious */
+  --color-accent-soft: #e8c5b8;  /* pale terracotta for hover bg */
+}
+
+[x-cloak] { display: none !important; }
+
+body {
+  font-family: 'Inter Tight', system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";  /* tabular numerals on Inter Tight */
+}
+
+.font-display {
+  font-family: 'Fraunces', Georgia, serif;
+  font-optical-sizing: auto;
+  font-variation-settings: 'opsz' 96;
+  letter-spacing: -0.02em;
+}
+
+.font-mono, table.font-mono, td.font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-feature-settings: "tnum", "cv11";
+}
+
+/* Tighter table rows */
+table {
+  border-collapse: collapse;
+}
+
+/* Smooth scrolling for drill-down transitions */
+html { scroll-behavior: smooth; }
+
+/* Focus ring */
+input:focus, textarea:focus, button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Subtle paper texture (very faint) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(circle at 1px 1px, rgba(0,0,0,0.015) 1px, transparent 0);
+  background-size: 20px 20px;
+  pointer-events: none;
+  z-index: 0;
+}
+main, header, footer { position: relative; z-index: 1; }
+
+/* Streaming AI response: a subtle blinking caret while streaming */
+.streaming::after {
+  content: '▍';
+  display: inline-block;
+  animation: blink 1.1s steps(2) infinite;
+  margin-left: 1px;
+  color: var(--color-accent);
+}
+@keyframes blink {
+  to { opacity: 0; }
+}
+
+/* Soft fade-in for newly-loaded panels */
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Markdown-ish prose */
+.prose-thesis p { line-height: 1.7; }
+.prose-thesis a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
