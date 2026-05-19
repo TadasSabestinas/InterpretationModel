@@ -1,8 +1,7 @@
-// app.js — Alpine.js component powering the SPA
+// app.js
 
 function app() {
   return {
-    // ===== Top-level state =====
     view: 'analyze',           // 'analyze' | 'compare' | 'about'
     llmReady: false,
     loading: false,
@@ -25,13 +24,6 @@ function app() {
     llmPrompt: '',
     userQuestion: '',
 
-    // Sensitivity analysis
-    sensitivity: null,
-    sensitivityLoading: false,
-
-    // PDF export
-    pdfLoading: false,
-
     // Hotspots
     hotspotTab: 'coverage_gap_risk',
     hotspotOpen: true,
@@ -46,7 +38,6 @@ function app() {
     // Charts
     _radar: null,
 
-    // ===== Lifecycle =====
     async init() {
       try {
         const r = await fetch('/api/health').then(r => r.json());
@@ -66,10 +57,14 @@ function app() {
 
     },
 
-    // ===== Single-report upload =====
     async uploadSingle(event) {
       const file = event.target.files[0];
       if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.xml')) {
+        this.uploadError = 'Only .xml files are accepted.';
+        event.target.value = '';
+        return;
+      }
       this.loading = true;
       this.uploadError = '';
       try {
@@ -82,7 +77,6 @@ function app() {
         }
         this.report = await res.json();
         this.drillPath = { package: null, cls: null };
-        this.sensitivity = null;
         this.hotspotTab = 'coverage_gap_risk';
         this.hotspotOpen = true;
         this.hotspotExpanded = false;
@@ -93,14 +87,19 @@ function app() {
       }
     },
 
+    // Breadcrumb navigation: clears deeper drill levels when user steps back up
     drillTo(level) {
       if (level === 'project') this.drillPath = { package: null, cls: null };
       if (level === 'package') this.drillPath.cls = null;
     },
 
-    // ===== Comparison upload =====
     async tryCompare() {
       if (!this.cmpFileA || !this.cmpFileB) return;
+      const notXml = [this.cmpFileA, this.cmpFileB].find(f => !f.name.toLowerCase().endsWith('.xml'));
+      if (notXml) {
+        this.cmpError = `'${notXml.name}' is not an .xml file.`;
+        return;
+      }
       this.loading = true;
       this.cmpError = '';
       try {
@@ -130,7 +129,6 @@ function app() {
       this.resetLlm();
     },
 
-    // ===== Derived data accessors =====
     sortedPackages() {
       return [...(this.report?.packages || [])].sort((a, b) => a.quality_score - b.quality_score);
     },
@@ -159,58 +157,11 @@ function app() {
         .sort((a, b) => a.quality_score - b.quality_score);
     },
 
-    // ===== Sensitivity analysis =====
-    async runSensitivity() {
-      if (!this.report?.classes?.length) return;
-      this.sensitivityLoading = true;
-      this.sensitivity = null;
-      try {
-        const res = await fetch('/api/sensitivity', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ classes: this.report.classes }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || `HTTP ${res.status}`);
-        }
-        this.sensitivity = await res.json();
-      } catch (e) {
-        console.error('Sensitivity analysis failed:', e);
-      } finally {
-        this.sensitivityLoading = false;
-      }
-    },
-
-    sensitivityShiftLabel(shift) {
-      if (shift > 0) return `↑${shift}`;
-      if (shift < 0) return `↓${Math.abs(shift)}`;
-      return '—';
-    },
-
-    sensitivityShiftClass(shift) {
-      if (shift > 0) return 'text-green-600 font-semibold';
-      if (shift < 0) return 'text-red-600 font-semibold';
-      return 'text-ink/30';
-    },
-
-    sensitivityInterpretationClass(interp) {
-      if (interp === 'stable')            return 'border-green-200 bg-green-50 text-green-800';
-      if (interp === 'moderately stable') return 'border-amber-200 bg-amber-50 text-amber-800';
-      return 'border-red-200 bg-red-50 text-red-800';
-    },
-
-    sensitivityRhoClass(rho) {
-      if (rho >= 0.95) return 'text-green-700 font-semibold';
-      if (rho >= 0.85) return 'text-amber-700 font-semibold';
-      return 'text-red-700 font-semibold';
-    },
-
-    // ===== Metric card definitions =====
     projectMetricCards() {
       return this.projectMetricCardsFor(this.report?.project || {});
     },
 
+    // note field distinguishes raw JaCoCo metrics from derived ones for UI badge colouring
     projectMetricCardsFor(p) {
       return [
         { key: 'line',   label: 'Line',          value: p.line_pct,                    unit: '%', note: 'JaCoCo' },
@@ -219,7 +170,7 @@ function app() {
         { key: 'method', label: 'Method',        value: p.method_pct,                  unit: '%', note: 'JaCoCo' },
         { key: 'mean',   label: 'Mean(L,B)',     value: p.mean_line_branch,            unit: '%', note: 'derived' },
         { key: 'geo',    label: 'Geo mean',      value: p.coverage_geo_mean,           unit: '%', note: 'derived' },
-        { key: 'wlc',    label: 'Wtd line',      value: p.weighted_line_cov,           unit: '%', note: 'derived' },
+        { key: 'wlc',    label: 'Meth. mean',    value: p.mean_method_cov,             unit: '%', note: 'derived' },
       ];
     },
 
@@ -246,13 +197,11 @@ function app() {
       if (!c) return [];
       return [
         { key: 'mean', label: 'Mean(L,B)',     value: c.mean_line_branch,  unit: '%' },
-        { key: 'wlc',  label: 'Weighted line', value: c.weighted_line_cov, unit: '%' },
+        { key: 'wlc',  label: 'Meth. mean',    value: c.mean_method_cov,   unit: '%' },
       ];
     },
 
-    // ===== Visual helpers =====
     gradeColor(g) {
-      // Returns Tailwind classes for the grade pill
       const map = {
         'A': 'bg-green-100 text-green-800',
         'B': 'bg-emerald-100 text-emerald-800',
@@ -263,7 +212,6 @@ function app() {
       return map[g] || 'bg-gray-100 text-gray-800';
     },
 
-    // ===== Heat color helper =====
     heatColor(value, type = 'coverage') {
       if (type === 'diff') {
         // Maps [-30, 30] → red … transparent … green. Used for Δ Line column.
@@ -278,7 +226,6 @@ function app() {
       return `background-color: hsla(${hue}, 70%, 50%, 0.12)`;
     },
 
-    // ===== Charts =====
     renderClassRadar() {
       const c = this.currentClass();
       if (!c) return;
@@ -294,7 +241,7 @@ function app() {
             label: c.class_name,
             data: [
               c.line_pct, c.branch_pct, c.instruction_pct,
-              c.mean_line_branch, c.weighted_line_cov,
+              c.mean_line_branch, c.mean_method_cov,
             ],
             backgroundColor: 'rgba(184, 84, 61, 0.15)',
             borderColor: '#b8543d',
@@ -330,7 +277,7 @@ function app() {
         { key: 'method', label: 'Method %',      a: a.method_pct,        b: b.method_pct },
         { key: 'mean',   label: 'Mean(L,B)',     a: a.mean_line_branch,  b: b.mean_line_branch },
         { key: 'geo',    label: 'Geo mean',      a: a.coverage_geo_mean, b: b.coverage_geo_mean },
-        { key: 'wlc',    label: 'Wtd line',      a: a.weighted_line_cov, b: b.weighted_line_cov },
+        { key: 'wlc',    label: 'Meth. mean',    a: a.mean_method_cov,   b: b.mean_method_cov },
         { key: 'score',  label: 'Quality score', a: a.quality_score,     b: b.quality_score },
       ];
     },
@@ -342,12 +289,13 @@ function app() {
     },
 
     compareDeltaLabel(delta) {
-      if (delta == null || Math.abs(delta) < 0.05) return '—';
+      if (delta == null || Math.abs(delta) < 0.05) return '-';
       return (delta > 0 ? '+' : '') + delta.toFixed(1);
     },
 
     _buildComparedPackages() {
       if (!this.comparison) return [];
+      // Full outer join on package name, packages present in only one report get status 'new'/'removed'
       const pkgsA = new Map(this.comparison.a.packages.map(p => [p.package_name, p]));
       const pkgsB = new Map(this.comparison.b.packages.map(p => [p.package_name, p]));
       const allNames = new Set([...pkgsA.keys(), ...pkgsB.keys()]);
@@ -384,35 +332,6 @@ function app() {
       return this.hotspotExpanded ? list : list.slice(0, 20);
     },
 
-    async downloadPdf() {
-      if (!this.report || this.pdfLoading) return;
-      this.pdfLoading = true;
-      try {
-        const res = await fetch('/api/report/pdf', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ results: this.report }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || `HTTP ${res.status}`);
-        }
-        const blob = await res.blob();
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        const date = new Date().toISOString().slice(0, 10);
-        const name = (this.report.project?.project_name || 'project')
-                       .replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
-        a.href     = url;
-        a.download = `coverage-report-${name}-${date}.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        alert('PDF generation failed: ' + e.message);
-      } finally {
-        this.pdfLoading = false;
-      }
-    },
 
     distMaxCount() {
       const dist = this.report?.distribution;
@@ -420,7 +339,6 @@ function app() {
       return Math.max(...dist.map(b => b.count), 1);
     },
 
-    // ===== LLM streaming =====
     resetLlm() {
       this.llmText = '';
       this.llmPrompt = '';
@@ -456,12 +374,14 @@ function app() {
       if (!this.userQuestion.trim() || !target) return;
       const q = this.userQuestion;
       this.userQuestion = '';
-      this.llmText = (this.llmText ? this.llmText + '\n\n— — —\n\nQ: ' + q + '\n\n' : '');
+      this.llmText = (this.llmText ? this.llmText + '\n\nQ: ' + q + '\n\n' : '');
       await this._streamLlm('/api/ask', {
         target, level, question: q, show_prompt: false,
       }, /* append */ true);
     },
 
+    // Streams tokens from the backend SSE endpoint and appends them to llmText.
+    // append=true is used for follow-up questions so previous output is preserved.
     async _streamLlm(endpoint, body, append = false) {
       this.llmStreaming = true;
       if (!append) {

@@ -1,38 +1,10 @@
-"""
-prompts.py
-==========
-
-Prompt construction for the LLM-assisted interpretation layer.
-
-This module is deliberately kept separate from the API code so that:
-
-  1. The exact prompts used in the thesis can be inspected, cited,
-     and reproduced. Reviewers will want to see them.
-
-  2. Prompt versions can be tracked over time. If you tweak a prompt
-     during the thesis writing phase, keep the old version commented
-     out below the new one — that's a transparency record.
-
-  3. The prompts can be exposed in the UI itself (a "show prompt"
-     toggle), which is a methodologically honest design choice.
-
-Three prompt templates are defined here:
-
-  * single_target_interpretation — interprets metrics for one
-    project / package / class
-  * comparison_interpretation     — interprets the difference between
-    two analyzed reports
-  * focused_question              — open question about a target
-"""
-
 from __future__ import annotations
 import json
 
 
 SYSTEM_PROMPT = """\
 You are a software quality analyst helping a developer interpret JaCoCo \
-code coverage data that has been augmented with derived metrics from the \
-research literature.
+code coverage data that has been augmented with derived metrics.
 
 You should:
 - Be concise. Prefer 3-5 short paragraphs over long lists.
@@ -47,21 +19,49 @@ numbers shown.
 heard of cyclomatic complexity or mutation score.
 
 Metric reference (use this for interpretation):
-- instruction_pct, branch_pct, line_pct, method_pct: standard JaCoCo \
-percentages.
-- mean_line_branch: average of line% and branch%, a stronger signal \
-than either alone.
-- coverage_geo_mean: geometric mean of all four JaCoCo dimensions; \
-collapses if any dimension is weak.
-- weighted_line_cov: line coverage weighted by bytecode instructions \
-per line. Lower than line_pct means tests touch lines but don't \
-exercise their full bytecode work — a sign of shallow tests.
-- quality_score: composite 0-100 score: 0.35 × mean_line_branch + \
-0.35 × coverage_geo_mean + 0.30 × weighted_line_cov.
-- quality_grade: A/B/C/D/F based on quality_score.
 
-A class with high line_pct but low branch_pct is the classic JaCoCo \
-pathology: tests reach the code but never exercise its decisions.\
+Raw JaCoCo percentages (covered / total, as %):
+- instruction_pct: bytecode instructions executed. The most granular \
+JaCoCo signal; large methods dominate the denominator.
+- branch_pct: conditional branches taken. Each if/switch/loop creates \
+two branches; both must be exercised for full coverage.
+- line_pct: source lines touched. Coarser than instruction_pct; a line \
+is "covered" if any instruction on it ran.
+- method_pct: methods entered at least once. Does not measure how \
+thoroughly the method body was executed.
+
+Derived metrics:
+- mean_line_branch: arithmetic mean of line_pct and branch_pct. \
+Balances line reach against decision coverage; a stronger single signal \
+than either dimension alone.
+- coverage_geo_mean: geometric mean of instruction_pct, branch_pct, \
+and line_pct. Because it multiplies the three dimensions, it collapses \
+toward zero when any one dimension is weak — it cannot be inflated by \
+strength in the other two.
+- mean_method_cov: unweighted mean of instruction coverage across every \
+method of a class, treating each method equally regardless of size. \
+JaCoCo's instruction_pct is size-weighted, so large methods dominate; \
+mean_method_cov exposes the small untested methods that instruction_pct \
+hides. When mean_method_cov is noticeably lower than instruction_pct, \
+coverage is concentrated in large methods while smaller ones go untested.
+Composite:
+- quality_score: 0–100 composite: \
+0.35 × mean_line_branch + 0.35 × coverage_geo_mean + \
+0.30 × mean_method_cov. Weights branch and line reach equally, then \
+adds per-method uniformity. Penalises both low coverage and uneven \
+coverage across methods.
+- quality_grade: letter grade derived from quality_score \
+(A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 45, F < 45).
+- complexity_total: sum of cyclomatic complexity across all methods \
+in the target. Higher values mean more paths to test.
+
+Key interpretation heuristics:
+- High line_pct but low branch_pct: tests reach the code but never \
+exercise its conditional logic — the classic JaCoCo blind spot.
+- instruction_pct >> mean_method_cov: coverage is carried by a few \
+large methods; many small methods are untested.
+- coverage_geo_mean << instruction_pct: at least one coverage dimension \
+is weak despite the headline number looking acceptable.\
 """
 
 
@@ -79,11 +79,9 @@ def _format_metrics_block(target: dict, level: str) -> str:
             lines.append(f"  {k}: {target[k]}%")
     lines.append("")
     lines.append("Derived metrics:")
-    for k in ("mean_line_branch", "coverage_geo_mean", "weighted_line_cov",
-              "branch_density"):
+    for k in ("mean_line_branch", "coverage_geo_mean", "mean_method_cov"):
         if k in target:
-            unit = "" if k == "branch_density" else "%"
-            lines.append(f"  {k}: {target[k]}{unit}")
+            lines.append(f"  {k}: {target[k]}%")
     lines.append("")
     lines.append("Composite:")
     if "quality_score" in target:
@@ -129,23 +127,52 @@ Keep the response under 250 words."""
 def comparison_interpretation(target_a: dict, target_b: dict,
                                label_a: str, label_b: str,
                                level: str) -> tuple[str, str]:
-    """Build a (system, user) prompt pair comparing two targets."""
-    block_a = _format_metrics_block(target_a, f"{level} A: {label_a}")
-    block_b = _format_metrics_block(target_b, f"{level} B: {label_b}")
+    """Build a (system, user) prompt pair comparing two targets.
 
-    user = f"""Please compare the test quality of these two {level}s.
+    If both targets share the same project_name they are treated as two
+    versions of the same project; the framing and questions shift from
+    cross-project comparison to regression/improvement analysis.
+    """
+    name_a = target_a.get("project_name", "")
+    name_b = target_b.get("project_name", "")
+    same_project = bool(name_a and name_b and name_a == name_b)
 
-{block_a}
-
-{block_b}
-
+    if same_project:
+        tag_a = f"version A: {label_a}"
+        tag_b = f"version B: {label_b}"
+        intro = f"Please compare test quality between two versions of the same {level}."
+        questions = """\
+Specifically:
+1. Did test quality improve or regress from version A to version B, \
+and how significant is the change?
+2. Which metrics changed the most, and what do those shifts imply \
+about how the test suite evolved between versions?
+3. Are there any places where the derived metrics tell a different \
+story than the raw JaCoCo percentages — for example, a metric that \
+improved while another worsened?"""
+    else:
+        tag_a = f"project A: {label_a}"
+        tag_b = f"project B: {label_b}"
+        intro = f"Please compare the test quality of these two {level}s."
+        questions = """\
 Specifically:
 1. Which one has stronger tests overall, and by what margin?
 2. What are the most meaningful differences between them — not just \
 which numbers are higher, but what the differences imply about how the \
 projects are tested?
 3. Are there any places where the derived metrics tell a different \
-story than the raw JaCoCo percentages?
+story than the raw JaCoCo percentages?"""
+
+    block_a = _format_metrics_block(target_a, tag_a)
+    block_b = _format_metrics_block(target_b, tag_b)
+
+    user = f"""{intro}
+
+{block_a}
+
+{block_b}
+
+{questions}
 
 Keep the response under 300 words."""
     return SYSTEM_PROMPT, user

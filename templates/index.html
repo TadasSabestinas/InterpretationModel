@@ -1,748 +1,690 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Coverage Interpretation Model</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coverage Interpretation Model</title>
 
-  <!-- Tailwind via CDN — no build step required -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            paper:  '#f7f4ed',
-            ink:    '#1a1a1a',
-            accent: '#b8543d',
+    <!-- Tailwind via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              paper: "#f7f4ed",
+              ink: "#1a1a1a",
+              accent: "#b8543d",
+            },
+            fontFamily: {
+              sans: ["Arial", "sans-serif"],
+              display: ["Arial", "sans-serif"],
+              mono: ['"Courier New"', "monospace"],
+            },
           },
-          fontFamily: {
-            sans:    ['Inter Tight', 'system-ui', 'sans-serif'],
-            display: ['Fraunces', 'Georgia', 'serif'],
-            mono:    ['JetBrains Mono', 'ui-monospace', 'monospace'],
-          },
-        }
-      }
-    };
-  </script>
+        },
+      };
+    </script>
 
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Alpine.js for reactivity -->
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
 
-  <!-- Alpine.js for reactivity -->
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body class="bg-paper text-ink antialiased">
-  <div x-data="app()" x-init="init()" class="min-h-screen flex flex-col">
-
-    <!-- ===== Header ===== -->
-    <header class="border-b border-ink/10 bg-paper sticky top-0 z-30">
-      <div class="max-w-7xl mx-auto px-8 py-5 flex items-center justify-between">
-        <div class="flex items-baseline gap-4">
-          <h1 class="font-display text-2xl font-semibold tracking-tight">
-            Coverage Interpretation Model
-          </h1>
-        </div>
-        <nav class="flex gap-1 text-sm">
-          <button @click="report = null; comparison = null; cmpFileA = null; cmpFileB = null; drillPath = { package: null, cls: null }; sensitivity = null; hotspotOpen = true; resetLlm(); $nextTick(() => { if ($refs.singleFileInput) $refs.singleFileInput.value = ''; if ($refs.cmpInputA) $refs.cmpInputA.value = ''; if ($refs.cmpInputB) $refs.cmpInputB.value = ''; }); view = 'analyze'"
-                  class="px-4 py-1.5 rounded-full transition hover:bg-ink/5">
-            Home
-          </button>
-          <button @click="view = 'analyze'"
-                  :class="view === 'analyze' ? 'bg-ink text-paper' : 'hover:bg-ink/5'"
-                  class="px-4 py-1.5 rounded-full transition">
-            Analyze
-          </button>
-          <button @click="view = 'compare'"
-                  :class="view === 'compare' ? 'bg-ink text-paper' : 'hover:bg-ink/5'"
-                  class="px-4 py-1.5 rounded-full transition">
-            Compare
-          </button>
-          <button @click="view = 'about'"
-                  :class="view === 'about' ? 'bg-ink text-paper' : 'hover:bg-ink/5'"
-                  class="px-4 py-1.5 rounded-full transition">
-            About
-          </button>
-        </nav>
-      </div>
-      <!-- LLM status strip -->
-      <div class="max-w-7xl mx-auto px-8 pb-3 -mt-2 flex items-center gap-3 text-xs text-ink/50">
-        <span class="inline-flex items-center gap-1.5">
-          <span :class="llmReady ? 'bg-accent' : 'bg-ink/20'"
-                class="w-1.5 h-1.5 rounded-full"></span>
-          <span x-text="llmReady ? 'AI interpretation enabled' : 'AI interpretation unavailable (set GROQ_API_KEY)'"></span>
-        </span>
-      </div>
-    </header>
-
-    <!-- ===== Main content ===== -->
-    <main class="flex-1 max-w-7xl mx-auto px-8 py-10 w-full">
-
-      <!-- ============ ANALYZE VIEW ============ -->
-      <section x-show="view === 'analyze'" x-cloak>
-
-        <!-- Empty state: upload -->
-        <div x-show="!report" class="max-w-2xl mx-auto text-center py-20">
-          <h2 class="font-display text-5xl font-medium tracking-tight mb-4">
-            Read your coverage report,<br/>
-            <span class="italic text-accent">honestly.</span>
-          </h2>
-          <p class="text-ink/60 text-lg mb-12 max-w-lg mx-auto">
-            Upload a JaCoCo XML report. Get the standard coverage metrics
-            alongside derived metrics that surface what raw percentages hide.
-          </p>
-
-          <label class="inline-block cursor-pointer group">
-            <input type="file" accept=".xml" class="hidden" x-ref="singleFileInput"
-                   @change="uploadSingle($event)">
-            <span class="inline-flex items-center gap-2 px-8 py-4 bg-ink text-paper rounded-full text-base group-hover:bg-accent transition">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-              Upload JaCoCo XML
-            </span>
-          </label>
-
-          <p x-show="uploadError" class="mt-4 text-sm text-red-700" x-text="uploadError"></p>
-          <p x-show="loading" class="mt-4 text-sm text-ink/60">Parsing&hellip;</p>
-        </div>
-
-        <!-- Loaded state: drill-down -->
-        <div x-show="report" x-cloak class="space-y-8">
-
-          <!-- Project summary -->
-          <div class="border border-ink/10 rounded-lg overflow-hidden">
-            <div class="grid grid-cols-1 md:grid-cols-[1fr,2fr] divide-ink/10 md:divide-x">
-
-              <!-- Score side -->
-              <div class="p-8 flex flex-col justify-center bg-ink/[0.02]">
-                <div class="text-xs uppercase tracking-wider text-ink/50 mb-3">
-                  <span x-text="report.project.project_name"></span>
-                </div>
-                <div class="flex items-baseline gap-4">
-                  <div class="font-display text-7xl font-semibold tracking-tight"
-                       x-text="report.project.quality_score"></div>
-                  <div :class="gradeColor(report.project.quality_grade)"
-                       class="font-display text-3xl font-semibold"
-                       x-text="report.project.quality_grade"></div>
-                </div>
-                <div class="text-sm text-ink/50 mt-2">Quality score</div>
-
-                <div class="mt-6 flex gap-6 text-sm">
-                  <div>
-                    <div class="text-ink/50 text-xs">Packages</div>
-                    <div class="font-mono text-base" x-text="report.project.n_packages"></div>
-                  </div>
-                  <div>
-                    <div class="text-ink/50 text-xs">Classes</div>
-                    <div class="font-mono text-base" x-text="report.classes.length"></div>
-                  </div>
-                  <div>
-                    <div class="text-ink/50 text-xs">Complexity</div>
-                    <div class="font-mono text-base" x-text="report.project.complexity_total"></div>
-                  </div>
-                </div>
-
-                <div class="mt-6 flex flex-col gap-3">
-                  <button @click="explainTarget(report.project, 'project')"
-                          :disabled="!llmReady"
-                          class="inline-flex items-center gap-2 text-sm self-start text-accent hover:underline disabled:text-ink/30 disabled:cursor-not-allowed disabled:no-underline">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                    Get AI interpretation
-                  </button>
-                  <button @click="downloadPdf()"
-                          :disabled="pdfLoading"
-                          class="inline-flex items-center gap-2 text-sm self-start text-ink/60 hover:text-ink transition disabled:opacity-40 disabled:cursor-not-allowed">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
-                    <span x-text="pdfLoading ? 'Generating…' : 'Download PDF report'"></span>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Metrics grid -->
-              <div class="p-8 space-y-6">
-                <div>
-                  <div class="text-xs uppercase tracking-wider text-ink/30 mb-3">Raw JaCoCo</div>
-                  <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    <template x-for="m in rawJacocoCardsFor(report.project)" :key="m.key">
-                      <div>
-                        <div class="text-xs uppercase tracking-wider text-ink/50 mb-1" x-text="m.label"></div>
-                        <div class="font-mono text-2xl font-medium" x-text="m.value + (m.unit || '')"></div>
-                      </div>
-                    </template>
-                  </div>
-                </div>
-                <div class="pt-2 border-t border-ink/5">
-                  <div class="text-xs uppercase tracking-wider text-ink/30 mb-3">Derived metrics</div>
-                  <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    <template x-for="m in derivedCardsFor(report.project)" :key="m.key">
-                      <div>
-                        <div class="text-xs uppercase tracking-wider text-ink/50 mb-1" x-text="m.label"></div>
-                        <div class="font-mono text-2xl font-medium" x-text="m.value + (m.unit || '')"></div>
-                      </div>
-                    </template>
-                  </div>
-                </div>
-              </div>
-            </div>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body class="bg-paper text-ink antialiased">
+    <div x-data="app()" x-init="init()" class="min-h-screen flex flex-col">
+      <!-- ===== Header ===== -->
+      <header class="border-b border-ink/10 bg-paper sticky top-0 z-30">
+        <div
+          class="max-w-7xl mx-auto px-8 py-5 flex items-center justify-between"
+        >
+          <div class="flex items-baseline gap-4">
+            <h1 class="font-display text-2xl font-semibold tracking-tight">
+              Coverage Interpretation Model
+            </h1>
           </div>
-
-          <!-- Project-level LLM output panel -->
-          <div x-show="(llmStreaming || llmText) && !drillPath.package" x-cloak
-               class="border border-ink/10 rounded-lg p-6 bg-ink/[0.02]">
-            <h4 class="font-display text-lg font-medium mb-3">AI interpretation</h4>
-            <div class="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap"
-                 x-html="llmText"></div>
-            <div x-show="llmStreaming" class="mt-2 text-xs text-ink/40 animate-pulse">Streaming&hellip;</div>
-            <button x-show="llmText && !llmStreaming"
-                    @click="resetLlm(); explainTarget(report.project, 'project')"
-                    class="mt-3 text-xs text-ink/50 hover:text-accent">
-              Regenerate
+          <nav class="flex gap-1 text-sm">
+            <button
+              @click="report = null; comparison = null; cmpFileA = null; cmpFileB = null; drillPath = { package: null, cls: null }; hotspotOpen = true; resetLlm(); $nextTick(() => { if ($refs.singleFileInput) $refs.singleFileInput.value = ''; if ($refs.cmpInputA) $refs.cmpInputA.value = ''; if ($refs.cmpInputB) $refs.cmpInputB.value = ''; }); view = 'analyze'"
+              class="px-4 py-1.5 rounded-full transition hover:bg-ink/5"
+            >
+              Home
             </button>
-            <details x-show="llmPrompt" class="mt-4 text-xs">
-              <summary class="cursor-pointer text-ink/50 hover:text-accent">Show prompt sent to the model</summary>
-              <div class="mt-2 p-3 bg-paper border border-ink/10 rounded font-mono whitespace-pre-wrap text-ink/70"
-                   x-text="llmPrompt"></div>
-            </details>
-            <div x-show="llmReady" class="mt-6 pt-4 border-t border-ink/10">
-              <label class="text-xs uppercase tracking-wider text-ink/50">Ask a follow-up</label>
-              <textarea x-model="userQuestion"
-                        placeholder="e.g. Which packages need the most attention?"
-                        rows="2"
-                        class="w-full mt-2 p-2 text-sm border border-ink/10 rounded bg-paper focus:outline-none focus:border-accent"></textarea>
-              <button @click="askQuestion(report.project, 'project')"
-                      :disabled="!userQuestion.trim() || llmStreaming"
-                      class="mt-2 px-3 py-1.5 text-sm bg-ink text-paper rounded hover:bg-accent transition disabled:bg-ink/20 disabled:cursor-not-allowed">
-                Ask
-              </button>
-            </div>
+            <button
+              @click="resetLlm(); view = 'analyze'"
+              :class="view === 'analyze' ? 'bg-ink text-paper' : 'hover:bg-ink/5'"
+              class="px-4 py-1.5 rounded-full transition"
+            >
+              Analyze
+            </button>
+            <button
+              @click="resetLlm(); view = 'compare'"
+              :class="view === 'compare' ? 'bg-ink text-paper' : 'hover:bg-ink/5'"
+              class="px-4 py-1.5 rounded-full transition"
+            >
+              Compare
+            </button>
+            <button
+              @click="resetLlm(); view = 'about'"
+              :class="view === 'about' ? 'bg-ink text-paper' : 'hover:bg-ink/5'"
+              class="px-4 py-1.5 rounded-full transition"
+            >
+              About
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      <!-- ===== Main content ===== -->
+      <main class="flex-1 max-w-7xl mx-auto px-8 py-10 w-full">
+        <!-- ============ ANALYZE VIEW ============ -->
+        <section x-show="view === 'analyze'" x-cloak>
+          <!-- Empty state: upload -->
+          <div x-show="!report" class="max-w-2xl mx-auto text-center py-20">
+            <p class="text-ink/60 text-lg mb-12 max-w-lg mx-auto">
+              Upload a JaCoCo XML report. Get the standard coverage metrics
+              alongside derived metrics that surface what raw percentages hide.
+            </p>
+
+            <label class="inline-block cursor-pointer group">
+              <input
+                type="file"
+                accept=".xml"
+                class="hidden"
+                x-ref="singleFileInput"
+                @change="uploadSingle($event)"
+              />
+              <span
+                class="inline-flex items-center gap-2 px-8 py-4 bg-ink text-paper rounded-full text-base group-hover:bg-ink/80 transition"
+              >
+                <svg
+                  class="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                  />
+                </svg>
+                Upload JaCoCo XML
+              </span>
+            </label>
+
+            <p
+              x-show="uploadError"
+              class="mt-4 text-sm text-red-700"
+              x-text="uploadError"
+            ></p>
+            <p x-show="loading" class="mt-4 text-sm text-ink/60">
+              Parsing&hellip;
+            </p>
           </div>
 
-          <!-- Risky areas panel -->
-          <div x-show="!drillPath.package" x-cloak>
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <h3 class="font-display text-xl font-medium">Risky areas</h3>
-                <p class="text-xs text-ink/50 mt-0.5">Classes most likely to harbour untested behaviour</p>
-              </div>
-            </div>
-
-            <!-- Tab strip (hardcoded to avoid Alpine x-for @click scope issues) -->
-            <div class="flex gap-1 mb-3 flex-wrap text-xs">
-              <button @click="hotspotTab === 'coverage_gap_risk' ? hotspotOpen = !hotspotOpen : (hotspotTab = 'coverage_gap_risk', hotspotOpen = true, hotspotExpanded = false)"
-                      :class="hotspotTab === 'coverage_gap_risk' && hotspotOpen ? 'bg-ink text-paper' : 'text-ink/60 hover:bg-ink/5'"
-                      class="px-3 py-1.5 rounded-full transition flex items-center gap-1.5">
-                Coverage gap risk
-                <span x-show="report.hotspots.coverage_gap_risk.length > 0"
-                      :class="hotspotTab === 'coverage_gap_risk' && hotspotOpen ? 'opacity-60' : 'text-accent'"
-                      class="font-mono" x-text="report.hotspots.coverage_gap_risk.length"></span>
-              </button>
-              <button @click="hotspotTab === 'branch_blind_spots' ? hotspotOpen = !hotspotOpen : (hotspotTab = 'branch_blind_spots', hotspotOpen = true, hotspotExpanded = false)"
-                      :class="hotspotTab === 'branch_blind_spots' && hotspotOpen ? 'bg-ink text-paper' : 'text-ink/60 hover:bg-ink/5'"
-                      class="px-3 py-1.5 rounded-full transition flex items-center gap-1.5">
-                Branch blind spots
-                <span x-show="report.hotspots.branch_blind_spots.length > 0"
-                      :class="hotspotTab === 'branch_blind_spots' && hotspotOpen ? 'opacity-60' : 'text-accent'"
-                      class="font-mono" x-text="report.hotspots.branch_blind_spots.length"></span>
-              </button>
-              <button @click="hotspotTab === 'shallow_tests' ? hotspotOpen = !hotspotOpen : (hotspotTab = 'shallow_tests', hotspotOpen = true, hotspotExpanded = false)"
-                      :class="hotspotTab === 'shallow_tests' && hotspotOpen ? 'bg-ink text-paper' : 'text-ink/60 hover:bg-ink/5'"
-                      class="px-3 py-1.5 rounded-full transition flex items-center gap-1.5">
-                Shallow tests
-                <span x-show="report.hotspots.shallow_tests.length > 0"
-                      :class="hotspotTab === 'shallow_tests' && hotspotOpen ? 'opacity-60' : 'text-accent'"
-                      class="font-mono" x-text="report.hotspots.shallow_tests.length"></span>
-              </button>
-              <button @click="hotspotTab === 'untested_complexity' ? hotspotOpen = !hotspotOpen : (hotspotTab = 'untested_complexity', hotspotOpen = true, hotspotExpanded = false)"
-                      :class="hotspotTab === 'untested_complexity' && hotspotOpen ? 'bg-ink text-paper' : 'text-ink/60 hover:bg-ink/5'"
-                      class="px-3 py-1.5 rounded-full transition flex items-center gap-1.5">
-                Untested complexity
-                <span x-show="report.hotspots.untested_complexity.length > 0"
-                      :class="hotspotTab === 'untested_complexity' && hotspotOpen ? 'opacity-60' : 'text-accent'"
-                      class="font-mono" x-text="report.hotspots.untested_complexity.length"></span>
-              </button>
-            </div>
-
-            <!-- Tab content -->
-            <div x-show="hotspotOpen" class="border border-ink/10 rounded-lg overflow-hidden">
-              <!-- Coverage gap risk: project mean shown once as context header -->
-              <div x-show="hotspotTab === 'coverage_gap_risk' && report.hotspots.coverage_gap_risk.length > 0"
-                   class="px-4 py-2 bg-ink/3 border-b border-ink/8 text-xs text-ink/50 flex gap-4">
-                <span>Project mean: <span class="font-mono text-ink/70" x-text="report.hotspots.gap_risk_project_mean + '%'"></span></span>
-                <span>Threshold: &lt;<span class="font-mono text-ink/70" x-text="report.hotspots.gap_risk_threshold + '%'"></span></span>
-                <span class="text-ink/40">(≥10 pp below mean, max 85%)</span>
-              </div>
-              <div x-show="report.hotspots[hotspotTab].length === 0"
-                   class="px-6 py-8 text-sm text-ink/50 text-center">
-                No classes in this category — good news.
-              </div>
-              <ul x-show="report.hotspots[hotspotTab].length > 0"
-                  class="divide-y divide-ink/5">
-                <template x-for="entry in hotspotList()"
-                          :key="entry.package_name + '/' + entry.class_name">
-                  <li @click="(drillPath.package === entry.package_name && drillPath.cls === entry.class_name) ? drillPath = { package: null, cls: null } : (drillPath.package = entry.package_name, drillPath.cls = entry.class_name)"
-                      class="flex items-start gap-3 px-4 py-3 hover:bg-accent/5 cursor-pointer transition">
-                    <svg class="w-4 h-4 text-accent mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.538-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                    </svg>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-baseline gap-2 flex-wrap">
-                        <span class="font-mono text-sm font-medium" x-text="entry.class_name"></span>
-                        <span class="text-xs text-ink/40 truncate" x-text="entry.package_name"></span>
-                      </div>
-                      <div class="text-xs text-ink/60 mt-0.5" x-text="entry.reason"></div>
-                    </div>
-                    <span :class="gradeColor(entry.quality_grade)"
-                          class="inline-block w-6 h-6 rounded-full text-xs font-medium leading-6 text-center shrink-0"
-                          x-text="entry.quality_grade"></span>
-                  </li>
-                </template>
-              </ul>
-              <!-- Show all / shrink toggle — any tab with >20 entries -->
-              <div x-show="report.hotspots[hotspotTab].length > 20"
-                   class="border-t border-ink/8 px-4 py-2.5 flex items-center justify-between text-xs">
-                <span class="text-ink/40" x-text="hotspotExpanded ? report.hotspots[hotspotTab].length + ' entries shown' : 'Showing 20 of ' + report.hotspots[hotspotTab].length"></span>
-                <button @click="hotspotExpanded = !hotspotExpanded"
-                        class="text-accent hover:underline font-medium"
-                        x-text="hotspotExpanded ? 'Show less' : 'Show all ' + report.hotspots[hotspotTab].length"></button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Quality distribution histogram -->
-          <div x-show="!drillPath.package" x-cloak>
-            <div class="mb-4">
-              <h3 class="font-display text-xl font-medium">Quality distribution</h3>
-              <p class="text-xs text-ink/50 mt-0.5">How classes are spread across quality score buckets</p>
-            </div>
-            <div class="border border-ink/10 rounded-lg px-5 pt-4 pb-3">
-              <div class="flex gap-3">
-
-                <!-- Y-axis: label + tick values -->
-                <div class="flex gap-1.5 shrink-0" style="padding-bottom:38px;">
-                  <!-- rotated title -->
-                  <div class="flex items-center justify-center"
-                       style="writing-mode:vertical-rl; transform:rotate(180deg); font-size:9px; letter-spacing:0.08em; color:rgba(26,26,26,0.35);">
-                    CLASSES
+          <!-- Loaded state: drill-down -->
+          <div x-show="report" x-cloak class="space-y-8">
+            <!-- Project summary -->
+            <div class="border border-ink/10 rounded-lg overflow-hidden">
+              <div
+                class="grid grid-cols-1 md:grid-cols-[1fr,2fr] divide-ink/10 md:divide-x"
+              >
+                <!-- Score side -->
+                <div class="p-8 flex flex-col justify-center bg-ink/[0.02]">
+                  <div
+                    class="text-xs uppercase tracking-wider text-ink/50 mb-3"
+                  >
+                    <span x-text="report.project.project_name"></span>
                   </div>
-                  <!-- tick labels aligned to top / mid / bottom of bar area -->
-                  <div class="flex flex-col justify-between items-end" style="height:140px;">
-                    <span class="font-mono leading-none" style="font-size:9px; color:rgba(26,26,26,0.4);" x-text="distMaxCount()"></span>
-                    <span class="font-mono leading-none" style="font-size:9px; color:rgba(26,26,26,0.4);" x-text="Math.round(distMaxCount()/2)"></span>
-                    <span class="font-mono leading-none" style="font-size:9px; color:rgba(26,26,26,0.4);">0</span>
+                  <div class="flex items-baseline gap-4">
+                    <div
+                      class="font-display text-7xl font-semibold tracking-tight"
+                      x-text="report.project.quality_score"
+                    ></div>
+                    <div
+                      :class="gradeColor(report.project.quality_grade)"
+                      class="font-display text-3xl font-semibold"
+                      x-text="report.project.quality_grade"
+                    ></div>
                   </div>
-                </div>
+                  <div class="text-sm text-ink/50 mt-2">Quality score</div>
 
-                <!-- Chart body -->
-                <div class="flex-1 min-w-0">
-                  <!-- Bars -->
-                  <div class="flex items-end gap-1 border-b border-l border-ink/15" style="height:140px;">
-                    <template x-for="(b, i) in report.distribution" :key="i">
-                      <div class="flex-1 flex items-end justify-center" style="height:100%;"
-                           :title="'Score ' + b.bucket_label + ': ' + b.count + ' class' + (b.count !== 1 ? 'es' : '') + (b.mean_complexity ? ' · avg complexity ' + b.mean_complexity : '') + (b.sample_class_names.length ? ' · ' + b.sample_class_names.join(', ') : '')">
-                        <div class="w-full rounded-t-sm"
-                             :style="'height:' + Math.max(b.count / distMaxCount() * 138, b.count > 0 ? 2 : 0) + 'px; background-color: hsla(' + Math.round(i / 9 * 120) + ',65%,45%,0.78);'">
-                        </div>
-                      </div>
-                    </template>
-                  </div>
-                  <!-- X-axis bucket labels -->
-                  <div class="flex gap-1 mt-1.5">
-                    <template x-for="(b, i) in report.distribution" :key="i">
-                      <div class="flex-1 text-center font-mono leading-tight"
-                           style="font-size:9px; color:rgba(26,26,26,0.4);"
-                           x-text="b.bucket_label"></div>
-                    </template>
-                  </div>
-                  <!-- X-axis title -->
-                  <div class="text-center mt-1.5"
-                       style="font-size:9px; letter-spacing:0.08em; color:rgba(26,26,26,0.35);">
-                    QUALITY SCORE
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          </div>
-
-          <!-- Drill-down -->
-          <div>
-            <div class="flex items-center gap-3 mb-4 text-sm">
-              <button @click="drillTo('project')"
-                      class="hover:text-accent">
-                Project
-              </button>
-              <template x-if="drillPath.package">
-                <span class="flex items-center gap-3">
-                  <span class="text-ink/30">/</span>
-                  <button @click="drillTo('package')"
-                          class="hover:text-accent" x-text="drillPath.package"></button>
-                </span>
-              </template>
-              <template x-if="drillPath.cls">
-                <span class="flex items-center gap-3">
-                  <span class="text-ink/30">/</span>
-                  <span x-text="drillPath.cls"></span>
-                </span>
-              </template>
-            </div>
-
-            <!-- Package list (when no package selected) -->
-            <div x-show="!drillPath.package" x-cloak>
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="font-display text-xl font-medium">Packages</h3>
-                <div class="text-xs text-ink/50">
-                  Sorted by quality score &middot; click a row to drill in
-                </div>
-              </div>
-              <div class="border border-ink/10 rounded-lg overflow-hidden">
-                <table class="w-full text-sm">
-                  <thead class="bg-ink/[0.02] text-xs uppercase tracking-wider text-ink/60">
-                    <tr>
-                      <th class="text-left px-4 py-3 font-medium">Package</th>
-                      <th class="text-right px-3 py-3 font-medium">Classes</th>
-                      <th class="text-right px-3 py-3 font-medium">CC</th>
-                      <th class="text-right px-3 py-3 font-medium">Line%</th>
-                      <th class="text-right px-3 py-3 font-medium">Branch%</th>
-                      <th class="text-right px-3 py-3 font-medium">Mean(L,B)</th>
-                      <th class="text-right px-3 py-3 font-medium">Wtd Line</th>
-                      <th class="text-right px-3 py-3 font-medium">Score</th>
-                      <th class="text-center px-3 py-3 font-medium">Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-ink/5 font-mono">
-                    <template x-for="p in sortedPackages()" :key="p.package_name">
-                      <tr @click="drillPath.package = p.package_name"
-                          class="hover:bg-accent/5 cursor-pointer transition">
-                        <td class="px-4 py-2.5 text-ink/80 font-sans" x-text="p.package_name"></td>
-                        <td class="px-3 py-2.5 text-right text-ink/60" x-text="p.n_classes"></td>
-                        <td class="px-3 py-2.5 text-right text-ink/60" x-text="p.complexity_total"></td>
-                        <td class="px-3 py-2.5 text-right" :style="heatColor(p.line_pct)" x-text="p.line_pct"></td>
-                        <td class="px-3 py-2.5 text-right" :style="heatColor(p.branch_pct)" x-text="p.branch_pct"></td>
-                        <td class="px-3 py-2.5 text-right" :style="heatColor(p.mean_line_branch)" x-text="p.mean_line_branch"></td>
-                        <td class="px-3 py-2.5 text-right" :style="heatColor(p.weighted_line_cov)" x-text="p.weighted_line_cov"></td>
-                        <td class="px-3 py-2.5 text-right font-medium" :style="heatColor(p.quality_score)" x-text="p.quality_score"></td>
-                        <td class="px-3 py-2.5 text-center">
-                          <span :class="gradeColor(p.quality_grade)"
-                                class="inline-block w-6 h-6 rounded-full text-xs font-medium leading-6 text-center"
-                                x-text="p.quality_grade"></span>
-                        </td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Sensitivity analysis panel -->
-              <div class="mt-8">
-                <div class="flex items-center justify-between mb-1">
-                  <div>
-                    <h3 class="font-display text-xl font-medium">Weight sensitivity</h3>
-                    <p class="text-xs text-ink/50 mt-0.5">Each composite weight perturbed ±0.10 — do package rankings hold?</p>
-                  </div>
-                  <button @click="runSensitivity()"
-                          :disabled="sensitivityLoading"
-                          class="inline-flex items-center gap-2 text-sm px-4 py-2 bg-ink text-paper rounded hover:bg-accent transition disabled:bg-ink/20 disabled:cursor-not-allowed">
-                    <svg x-show="!sensitivityLoading" class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                    <span x-text="sensitivityLoading ? 'Computing…' : 'Run analysis'"></span>
-                  </button>
-                </div>
-
-                <div x-show="sensitivity" x-cloak class="mt-4 space-y-4">
-
-                  <!-- Summary banner -->
-                  <div class="px-4 py-3 rounded-lg border text-sm"
-                       :class="sensitivityInterpretationClass(sensitivity.summary.interpretation)">
-                    <span class="font-semibold capitalize" x-text="sensitivity.summary.interpretation"></span>
-                    <span x-text="' — package rankings under ±0.10 weight perturbations. Lowest Spearman ρ: '"></span>
-                    <span class="font-mono font-semibold" x-text="sensitivity.summary.min_spearman"></span>
-                    <span x-text="', largest rank shift: '"></span>
-                    <span class="font-mono font-semibold" x-text="sensitivity.summary.max_rank_shift_overall + ' position(s).'"></span>
-                  </div>
-
-                  <!-- Perturbation summary table -->
-                  <div class="border border-ink/10 rounded-lg overflow-hidden">
-                    <table class="w-full text-sm">
-                      <thead class="bg-ink/[0.02] text-xs uppercase tracking-wider text-ink/60">
-                        <tr>
-                          <th class="text-left px-4 py-3 font-medium">Weight changed</th>
-                          <th class="text-center px-3 py-3 font-medium">Δ</th>
-                          <th class="text-center px-3 py-3 font-medium">New weight</th>
-                          <th class="text-center px-3 py-3 font-medium">Spearman ρ</th>
-                          <th class="text-center px-3 py-3 font-medium">Max rank shift</th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-ink/5">
-                        <template x-for="p in sensitivity.perturbations" :key="p.weight_changed + p.delta">
-                          <tr class="hover:bg-accent/5 transition">
-                            <td class="px-4 py-2.5 font-medium" x-text="p.weight_label"></td>
-                            <td class="px-3 py-2.5 text-center font-mono text-xs"
-                                :class="p.delta > 0 ? 'text-green-700' : 'text-red-700'"
-                                x-text="(p.delta > 0 ? '+' : '') + p.delta.toFixed(2)"></td>
-                            <td class="px-3 py-2.5 text-center font-mono text-xs text-ink/60"
-                                x-text="p.perturbed_weights[p.weight_changed].toFixed(2)"></td>
-                            <td class="px-3 py-2.5 text-center font-mono text-xs"
-                                :class="sensitivityRhoClass(p.spearman_rho)"
-                                x-text="p.spearman_rho.toFixed(3)"></td>
-                            <td class="px-3 py-2.5 text-center font-mono text-xs"
-                                :class="p.max_rank_shift === 0 ? 'text-ink/30' : p.max_rank_shift <= 2 ? 'text-amber-700' : 'text-red-700'"
-                                x-text="p.max_rank_shift === 0 ? '—' : '±' + p.max_rank_shift"></td>
-                          </tr>
-                        </template>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <!-- Expandable per-package detail -->
-                  <details class="text-xs">
-                    <summary class="cursor-pointer text-ink/50 hover:text-ink transition select-none">
-                      Show per-package rank shifts for each perturbation
-                    </summary>
-                    <div class="mt-3 border border-ink/10 rounded-lg overflow-x-auto">
-                      <table class="text-xs">
-                        <thead class="bg-ink/[0.02] text-ink/60">
-                          <tr>
-                            <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap">Package</th>
-                            <th class="text-right px-3 py-2.5 font-medium whitespace-nowrap">Baseline</th>
-                            <template x-for="p in sensitivity.perturbations" :key="p.weight_changed + p.delta">
-                              <th class="text-center px-2 py-2.5 font-mono font-medium whitespace-nowrap"
-                                  x-text="p.weight_label + ' ' + (p.delta > 0 ? '+' : '') + p.delta.toFixed(2)"></th>
-                            </template>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-ink/5 font-mono">
-                          <template x-for="pkg in sensitivity.baseline_ranking" :key="pkg">
-                            <tr class="hover:bg-accent/5 transition">
-                              <td class="px-4 py-2 font-sans text-ink/70 whitespace-nowrap text-xs" x-text="pkg"></td>
-                              <td class="px-3 py-2 text-right" x-text="sensitivity.baseline_scores[pkg]"></td>
-                              <template x-for="p in sensitivity.perturbations" :key="p.weight_changed + p.delta">
-                                <td class="px-2 py-2 text-center"
-                                    :class="sensitivityShiftClass(p.package_score_changes.find(c => c.package_name === pkg)?.rank_shift ?? 0)"
-                                    x-text="sensitivityShiftLabel(p.package_score_changes.find(c => c.package_name === pkg)?.rank_shift ?? 0)"></td>
-                              </template>
-                            </tr>
-                          </template>
-                        </tbody>
-                      </table>
-                    </div>
-                    <p class="mt-1.5 text-ink/40">
-                      ↑N = moved up N positions &nbsp;·&nbsp; ↓N = moved down &nbsp;·&nbsp; weights renormalized proportionally after each perturbation
-                    </p>
-                  </details>
-
-                </div>
-              </div>
-            </div>
-
-            <!-- Class list (when package selected, no class) -->
-            <div x-show="drillPath.package && !drillPath.cls" x-cloak>
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="font-display text-xl font-medium">
-                  Classes in <span class="font-mono text-base text-ink/70" x-text="drillPath.package"></span>
-                </h3>
-                <button @click="explainPackage()"
-                        :disabled="!llmReady"
-                        class="text-sm text-accent hover:underline disabled:text-ink/30 disabled:cursor-not-allowed disabled:no-underline">
-                  AI interpretation of this package &rarr;
-                </button>
-              </div>
-              <div class="border border-ink/10 rounded-lg overflow-hidden">
-                <table class="w-full text-sm">
-                  <thead class="bg-ink/[0.02] text-xs uppercase tracking-wider text-ink/60">
-                    <tr>
-                      <th class="text-left px-4 py-3 font-medium">Class</th>
-                      <th class="text-right px-3 py-3 font-medium">CC</th>
-                      <th class="text-right px-3 py-3 font-medium">Line%</th>
-                      <th class="text-right px-3 py-3 font-medium">Branch%</th>
-                      <th class="text-right px-3 py-3 font-medium">Wtd Line</th>
-                      <th class="text-right px-3 py-3 font-medium" title="Where weighted line cov differs from line cov — JaCoCo's blind spot">&Delta; Line</th>
-                      <th class="text-right px-3 py-3 font-medium">Score</th>
-                      <th class="text-center px-3 py-3 font-medium">Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-ink/5 font-mono">
-                    <template x-for="c in classesInPackage()" :key="c.class_name">
-                      <tr @click="drillPath.cls = c.class_name"
-                          class="hover:bg-accent/5 cursor-pointer transition">
-                        <td class="px-4 py-2.5 text-ink/80 font-sans" x-text="c.class_name"></td>
-                        <td class="px-3 py-2.5 text-right text-ink/60" x-text="c.complexity_total"></td>
-                        <td class="px-3 py-2.5 text-right" :style="heatColor(c.line_pct)" x-text="c.line_pct"></td>
-                        <td class="px-3 py-2.5 text-right" :style="heatColor(c.branch_pct)" x-text="c.branch_pct"></td>
-                        <td class="px-3 py-2.5 text-right" :style="heatColor(c.weighted_line_cov)" x-text="c.weighted_line_cov"></td>
-                        <td class="px-3 py-2.5 text-right"
-                            :style="heatColor(c.weighted_line_cov - c.line_pct, 'diff')"
-                            x-text="(c.weighted_line_cov - c.line_pct).toFixed(1)"></td>
-                        <td class="px-3 py-2.5 text-right font-medium" :style="heatColor(c.quality_score)" x-text="c.quality_score"></td>
-                        <td class="px-3 py-2.5 text-center">
-                          <span :class="gradeColor(c.quality_grade)"
-                                class="inline-block w-6 h-6 rounded-full text-xs font-medium leading-6 text-center"
-                                x-text="c.quality_grade"></span>
-                        </td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Package-level LLM output panel -->
-              <div x-show="llmStreaming || llmText" x-cloak
-                   class="mt-6 border border-ink/10 rounded-lg p-6 bg-ink/[0.02]">
-                <h4 class="font-display text-lg font-medium mb-3">AI interpretation</h4>
-                <div class="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap"
-                     x-html="llmText"></div>
-                <div x-show="llmStreaming" class="mt-2 text-xs text-ink/40 animate-pulse">Streaming&hellip;</div>
-                <button x-show="llmText && !llmStreaming"
-                        @click="resetLlm(); explainPackage()"
-                        class="mt-3 text-xs text-ink/50 hover:text-accent">
-                  Regenerate
-                </button>
-                <details x-show="llmPrompt" class="mt-4 text-xs">
-                  <summary class="cursor-pointer text-ink/50 hover:text-accent">Show prompt sent to the model</summary>
-                  <div class="mt-2 p-3 bg-paper border border-ink/10 rounded font-mono whitespace-pre-wrap text-ink/70"
-                       x-text="llmPrompt"></div>
-                </details>
-                <div x-show="llmReady" class="mt-6 pt-4 border-t border-ink/10">
-                  <label class="text-xs uppercase tracking-wider text-ink/50">Ask a follow-up</label>
-                  <textarea x-model="userQuestion"
-                            placeholder="e.g. Why might branch coverage be low here?"
-                            rows="2"
-                            class="w-full mt-2 p-2 text-sm border border-ink/10 rounded bg-paper focus:outline-none focus:border-accent"></textarea>
-                  <button @click="askQuestion(report.packages.find(p => p.package_name === drillPath.package), 'package')"
-                          :disabled="!userQuestion.trim() || llmStreaming"
-                          class="mt-2 px-3 py-1.5 text-sm bg-ink text-paper rounded hover:bg-accent transition disabled:bg-ink/20 disabled:cursor-not-allowed">
-                    Ask
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Class detail (when class selected) -->
-            <div x-show="drillPath.cls" x-cloak>
-              <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                <!-- Class metrics + radar -->
-                <div class="lg:col-span-2 border border-ink/10 rounded-lg p-6">
-                  <div class="flex items-center justify-between mb-6">
+                  <div class="mt-6 flex gap-6 text-sm">
                     <div>
-                      <div class="text-xs text-ink/50 uppercase tracking-wider">Class</div>
-                      <h3 class="font-display text-2xl font-medium" x-text="drillPath.cls"></h3>
+                      <div class="text-ink/50 text-xs">Packages</div>
+                      <div
+                        class="font-mono text-base"
+                        x-text="report.project.n_packages"
+                      ></div>
                     </div>
-                    <div class="text-right">
-                      <div class="font-display text-5xl font-semibold" x-text="currentClass()?.quality_score"></div>
-                      <div :class="gradeColor(currentClass()?.quality_grade)"
-                           class="inline-block px-3 py-0.5 rounded-full text-sm mt-1"
-                           x-text="'Grade ' + currentClass()?.quality_grade"></div>
-                    </div>
-                  </div>
-
-                  <div class="space-y-4 mb-6 text-sm">
                     <div>
-                      <div class="text-xs uppercase tracking-wider text-ink/30 mb-2">Raw JaCoCo</div>
-                      <div class="grid grid-cols-3 gap-3">
-                        <template x-for="m in classRawCards()" :key="m.key">
-                          <div class="border border-ink/5 rounded p-3">
-                            <div class="text-xs uppercase tracking-wider text-ink/50 mb-1" x-text="m.label"></div>
-                            <div class="font-mono text-lg" x-text="m.value + (m.unit || '')"></div>
-                          </div>
-                        </template>
-                      </div>
+                      <div class="text-ink/50 text-xs">Classes</div>
+                      <div
+                        class="font-mono text-base"
+                        x-text="report.classes.length"
+                      ></div>
                     </div>
-                    <div class="pt-1 border-t border-ink/5">
-                      <div class="text-xs uppercase tracking-wider text-ink/30 mb-2">Derived metrics</div>
-                      <div class="grid grid-cols-3 gap-3">
-                        <template x-for="m in classMetricCards()" :key="m.key">
-                          <div class="border border-ink/5 rounded p-3">
-                            <div class="text-xs uppercase tracking-wider text-ink/50 mb-1" x-text="m.label"></div>
-                            <div class="font-mono text-lg" x-text="m.value + (m.unit || '')"></div>
-                          </div>
-                        </template>
-                      </div>
+                    <div>
+                      <div class="text-ink/50 text-xs">Complexity</div>
+                      <div
+                        class="font-mono text-base"
+                        x-text="report.project.complexity_total"
+                      ></div>
                     </div>
                   </div>
 
-                  <canvas id="classRadar" style="max-height:280px"></canvas>
-                </div>
-
-                <!-- LLM panel -->
-                <div class="border border-ink/10 rounded-lg p-6 bg-ink/[0.02]">
-                  <h4 class="font-display text-lg font-medium mb-1">AI interpretation</h4>
-                  <p class="text-xs text-ink/50 mb-4">
-                    Streamed from the model. Grounded only in the metrics above.
-                  </p>
-
-                  <button x-show="!llmText && !llmStreaming"
-                          @click="explainTarget(currentClass(), 'class')"
-                          :disabled="!llmReady"
-                          class="w-full px-4 py-2.5 bg-ink text-paper rounded text-sm hover:bg-accent transition disabled:bg-ink/20 disabled:cursor-not-allowed">
-                    Interpret this class
-                  </button>
-
-                  <div x-show="llmStreaming || llmText"
-                       class="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap"
-                       x-html="llmText"></div>
-
-                  <button x-show="(llmText || llmStreaming) && !llmStreaming"
-                          @click="resetLlm(); explainTarget(currentClass(), 'class')"
-                          class="mt-3 text-xs text-ink/50 hover:text-accent">
-                    Regenerate
-                  </button>
-
-                  <details x-show="llmPrompt" class="mt-4 text-xs">
-                    <summary class="cursor-pointer text-ink/50 hover:text-accent">Show prompt sent to the model</summary>
-                    <div class="mt-2 p-3 bg-paper border border-ink/10 rounded font-mono whitespace-pre-wrap" x-text="llmPrompt"></div>
-                  </details>
-
-                  <!-- Free-form question -->
-                  <div x-show="llmReady" class="mt-6 pt-6 border-t border-ink/10">
-                    <label class="text-xs uppercase tracking-wider text-ink/50">Ask a follow-up</label>
-                    <textarea x-model="userQuestion"
-                              placeholder="e.g. Why might this branch coverage be low?"
-                              rows="2"
-                              class="w-full mt-2 p-2 text-sm border border-ink/10 rounded bg-paper focus:outline-none focus:border-accent"></textarea>
-                    <button @click="askQuestion(currentClass(), 'class')"
-                            :disabled="!userQuestion.trim() || llmStreaming"
-                            class="mt-2 px-3 py-1.5 text-sm bg-ink text-paper rounded hover:bg-accent transition disabled:bg-ink/20 disabled:cursor-not-allowed">
-                      Ask
+                  <div class="mt-6 flex flex-col gap-3">
+                    <button
+                      @click="explainTarget(report.project, 'project')"
+                      :disabled="!llmReady"
+                      class="inline-flex items-center gap-2 text-sm self-start text-ink hover:underline disabled:text-ink/30 disabled:cursor-not-allowed disabled:no-underline"
+                    >
+                      Get AI interpretation
                     </button>
                   </div>
                 </div>
+
+                <!-- Metrics grid -->
+                <div class="p-8 space-y-6">
+                  <div>
+                    <div
+                      class="text-xs uppercase tracking-wider text-ink/30 mb-3"
+                    >
+                      Raw JaCoCo
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                      <template
+                        x-for="m in rawJacocoCardsFor(report.project)"
+                        :key="m.key"
+                      >
+                        <div>
+                          <div
+                            class="text-xs uppercase tracking-wider text-ink/50 mb-1"
+                            x-text="m.label"
+                          ></div>
+                          <div
+                            class="font-mono text-2xl font-medium"
+                            x-text="m.value + (m.unit || '')"
+                          ></div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                  <div class="pt-2 border-t border-ink/5">
+                    <div
+                      class="text-xs uppercase tracking-wider text-ink/30 mb-3"
+                    >
+                      Derived metrics
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                      <template
+                        x-for="m in derivedCardsFor(report.project)"
+                        :key="m.key"
+                      >
+                        <div>
+                          <div
+                            class="text-xs uppercase tracking-wider text-ink/50 mb-1"
+                            x-text="m.label"
+                          ></div>
+                          <div
+                            class="font-mono text-2xl font-medium"
+                            x-text="m.value + (m.unit || '')"
+                          ></div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Project-level LLM output panel -->
+            <div
+              x-show="(llmStreaming || llmText) && !drillPath.package"
+              x-cloak
+              class="border border-ink/10 rounded-lg p-6 bg-ink/[0.02]"
+            >
+              <h4 class="font-display text-lg font-medium mb-3">
+                AI interpretation
+              </h4>
+              <div
+                class="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap"
+                x-html="llmText"
+              ></div>
+              <div
+                x-show="llmStreaming"
+                class="mt-2 text-xs text-ink/40 animate-pulse"
+              >
+                Streaming&hellip;
+              </div>
+              <button
+                x-show="llmText && !llmStreaming"
+                @click="resetLlm(); explainTarget(report.project, 'project')"
+                class="mt-3 text-xs text-ink/50 hover:text-ink"
+              >
+                Regenerate
+              </button>
+              <details x-show="llmPrompt" class="mt-4 text-xs">
+                <summary class="cursor-pointer text-ink/50 hover:text-ink">
+                  Show prompt sent to the model
+                </summary>
+                <div
+                  class="mt-2 p-3 bg-paper border border-ink/10 rounded font-mono whitespace-pre-wrap text-ink/70"
+                  x-text="llmPrompt"
+                ></div>
+              </details>
+              <div x-show="llmReady" class="mt-6 pt-4 border-t border-ink/10">
+                <label class="text-xs uppercase tracking-wider text-ink/50"
+                  >Ask a follow-up</label
+                >
+                <textarea
+                  x-model="userQuestion"
+                  placeholder="e.g. Which packages need the most attention?"
+                  rows="2"
+                  class="w-full mt-2 p-2 text-sm border border-ink/10 rounded bg-paper focus:outline-none focus:border-ink/40"
+                ></textarea>
+                <button
+                  @click="askQuestion(report.project, 'project')"
+                  :disabled="!userQuestion.trim() || llmStreaming"
+                  class="mt-2 px-3 py-1.5 text-sm bg-ink text-paper rounded hover:bg-ink/80 transition disabled:bg-ink/20 disabled:cursor-not-allowed"
+                >
+                  Ask
+                </button>
+              </div>
+            </div>
+
+            <!-- Risky areas panel -->
+            <div x-show="!drillPath.package" x-cloak>
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="font-display text-xl font-medium">Risky areas</h3>
+                  <p class="text-xs text-ink/50 mt-0.5">
+                    Classes most likely to harbour untested behaviour
+                  </p>
+                </div>
               </div>
 
-              <!-- Methods table -->
-              <div class="mt-8">
-                <h4 class="font-display text-lg font-medium mb-4">Methods</h4>
+              <!-- Tab strip (hardcoded to avoid Alpine x-for @click scope issues) -->
+              <div class="flex gap-1 mb-3 flex-wrap text-xs">
+                <button
+                  @click="hotspotTab === 'coverage_gap_risk' ? hotspotOpen = !hotspotOpen : (hotspotTab = 'coverage_gap_risk', hotspotOpen = true, hotspotExpanded = false)"
+                  :class="hotspotTab === 'coverage_gap_risk' && hotspotOpen ? 'bg-ink text-paper' : 'text-ink/60 hover:bg-ink/5'"
+                  class="px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
+                >
+                  Coverage gap risk
+                  <span
+                    x-show="report.hotspots.coverage_gap_risk.length > 0"
+                    :class="hotspotTab === 'coverage_gap_risk' && hotspotOpen ? 'opacity-60' : 'text-ink/60'"
+                    class="font-mono"
+                    x-text="report.hotspots.coverage_gap_risk.length"
+                  ></span>
+                </button>
+                <button
+                  @click="hotspotTab === 'branch_blind_spots' ? hotspotOpen = !hotspotOpen : (hotspotTab = 'branch_blind_spots', hotspotOpen = true, hotspotExpanded = false)"
+                  :class="hotspotTab === 'branch_blind_spots' && hotspotOpen ? 'bg-ink text-paper' : 'text-ink/60 hover:bg-ink/5'"
+                  class="px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
+                >
+                  Branch blind spots
+                  <span
+                    x-show="report.hotspots.branch_blind_spots.length > 0"
+                    :class="hotspotTab === 'branch_blind_spots' && hotspotOpen ? 'opacity-60' : 'text-ink/60'"
+                    class="font-mono"
+                    x-text="report.hotspots.branch_blind_spots.length"
+                  ></span>
+                </button>
+                <button
+                  @click="hotspotTab === 'shallow_tests' ? hotspotOpen = !hotspotOpen : (hotspotTab = 'shallow_tests', hotspotOpen = true, hotspotExpanded = false)"
+                  :class="hotspotTab === 'shallow_tests' && hotspotOpen ? 'bg-ink text-paper' : 'text-ink/60 hover:bg-ink/5'"
+                  class="px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
+                >
+                  Concentrated coverage
+                  <span
+                    x-show="report.hotspots.shallow_tests.length > 0"
+                    :class="hotspotTab === 'shallow_tests' && hotspotOpen ? 'opacity-60' : 'text-ink/60'"
+                    class="font-mono"
+                    x-text="report.hotspots.shallow_tests.length"
+                  ></span>
+                </button>
+                <button
+                  @click="hotspotTab === 'untested_complexity' ? hotspotOpen = !hotspotOpen : (hotspotTab = 'untested_complexity', hotspotOpen = true, hotspotExpanded = false)"
+                  :class="hotspotTab === 'untested_complexity' && hotspotOpen ? 'bg-ink text-paper' : 'text-ink/60 hover:bg-ink/5'"
+                  class="px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
+                >
+                  Untested complexity
+                  <span
+                    x-show="report.hotspots.untested_complexity.length > 0"
+                    :class="hotspotTab === 'untested_complexity' && hotspotOpen ? 'opacity-60' : 'text-ink/60'"
+                    class="font-mono"
+                    x-text="report.hotspots.untested_complexity.length"
+                  ></span>
+                </button>
+              </div>
+
+              <!-- Tab content -->
+              <div
+                x-show="hotspotOpen"
+                class="border border-ink/10 rounded-lg overflow-hidden"
+              >
+                <!-- Coverage gap risk: project mean shown once as context header -->
+                <div
+                  x-show="hotspotTab === 'coverage_gap_risk' && report.hotspots.coverage_gap_risk.length > 0"
+                  class="px-4 py-2 bg-ink/3 border-b border-ink/8 text-xs text-ink/50 flex gap-4"
+                >
+                  <span
+                    >Project mean:
+                    <span
+                      class="font-mono text-ink/70"
+                      x-text="report.hotspots.gap_risk_project_mean + '%'"
+                    ></span
+                  ></span>
+                  <span
+                    >Threshold: &lt;<span
+                      class="font-mono text-ink/70"
+                      x-text="report.hotspots.gap_risk_threshold + '%'"
+                    ></span
+                  ></span>
+                  <span class="text-ink/40">(≥10 pp below mean, max 85%)</span>
+                </div>
+                <div
+                  x-show="report.hotspots[hotspotTab].length === 0"
+                  class="px-6 py-8 text-sm text-ink/50 text-center"
+                >
+                  No classes in this category.
+                </div>
+                <ul
+                  x-show="report.hotspots[hotspotTab].length > 0"
+                  class="divide-y divide-ink/5"
+                >
+                  <template
+                    x-for="entry in hotspotList()"
+                    :key="entry.package_name + '/' + entry.class_name"
+                  >
+                    <li
+                      @click="(drillPath.package === entry.package_name && drillPath.cls === entry.class_name) ? drillPath = { package: null, cls: null } : (drillPath.package = entry.package_name, drillPath.cls = entry.class_name)"
+                      class="flex items-start gap-3 px-4 py-3 hover:bg-ink/5 cursor-pointer transition"
+                    >
+                      <svg
+                        class="w-4 h-4 text-ink/40 mt-0.5 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.538-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-baseline gap-2 flex-wrap">
+                          <span
+                            class="font-mono text-sm font-medium"
+                            x-text="entry.class_name"
+                          ></span>
+                          <span
+                            class="text-xs text-ink/40 truncate"
+                            x-text="entry.package_name"
+                          ></span>
+                        </div>
+                        <div
+                          class="text-xs text-ink/60 mt-0.5"
+                          x-text="entry.reason"
+                        ></div>
+                      </div>
+                      <span
+                        :class="gradeColor(entry.quality_grade)"
+                        class="inline-block w-6 h-6 rounded-full text-xs font-medium leading-6 text-center shrink-0"
+                        x-text="entry.quality_grade"
+                      ></span>
+                    </li>
+                  </template>
+                </ul>
+                <!-- show all / shrink toggle -->
+                <div
+                  x-show="report.hotspots[hotspotTab].length > 20"
+                  class="border-t border-ink/8 px-4 py-2.5 flex items-center justify-between text-xs"
+                >
+                  <span
+                    class="text-ink/40"
+                    x-text="hotspotExpanded ? report.hotspots[hotspotTab].length + ' entries shown' : 'Showing 20 of ' + report.hotspots[hotspotTab].length"
+                  ></span>
+                  <button
+                    @click="hotspotExpanded = !hotspotExpanded"
+                    class="text-ink/60 hover:underline font-medium"
+                    x-text="hotspotExpanded ? 'Show less' : 'Show all ' + report.hotspots[hotspotTab].length"
+                  ></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quality distribution histogram -->
+            <div x-show="!drillPath.package" x-cloak>
+              <div class="mb-4">
+                <h3 class="font-display text-xl font-medium">
+                  Quality distribution
+                </h3>
+                <p class="text-xs text-ink/50 mt-0.5">
+                  How classes are spread across quality score buckets
+                </p>
+              </div>
+              <div class="border border-ink/10 rounded-lg px-5 pt-4 pb-3">
+                <div class="flex gap-3">
+                  <!-- Y-axis: label + tick values -->
+                  <div
+                    class="flex gap-1.5 shrink-0"
+                    style="padding-bottom: 38px"
+                  >
+                    <!-- rotated title -->
+                    <div
+                      class="flex items-center justify-center"
+                      style="
+                        writing-mode: vertical-rl;
+                        transform: rotate(180deg);
+                        font-size: 9px;
+                        letter-spacing: 0.08em;
+                        color: rgba(26, 26, 26, 0.35);
+                      "
+                    >
+                      CLASSES
+                    </div>
+                    <!-- tick labels aligned to top / mid / bottom of bar area -->
+                    <div
+                      class="flex flex-col justify-between items-end"
+                      style="height: 140px"
+                    >
+                      <span
+                        class="font-mono leading-none"
+                        style="font-size: 9px; color: rgba(26, 26, 26, 0.4)"
+                        x-text="distMaxCount()"
+                      ></span>
+                      <span
+                        class="font-mono leading-none"
+                        style="font-size: 9px; color: rgba(26, 26, 26, 0.4)"
+                        x-text="Math.round(distMaxCount()/2)"
+                      ></span>
+                      <span
+                        class="font-mono leading-none"
+                        style="font-size: 9px; color: rgba(26, 26, 26, 0.4)"
+                        >0</span
+                      >
+                    </div>
+                  </div>
+
+                  <!-- Chart body -->
+                  <div class="flex-1 min-w-0">
+                    <!-- Bars -->
+                    <div
+                      class="flex items-end gap-1 border-b border-l border-ink/15"
+                      style="height: 140px"
+                    >
+                      <template x-for="(b, i) in report.distribution" :key="i">
+                        <div
+                          class="flex-1 flex items-end justify-center"
+                          style="height: 100%"
+                          :title="'Score ' + b.bucket_label + ': ' + b.count + ' class' + (b.count !== 1 ? 'es' : '') + (b.mean_complexity ? ' · avg complexity ' + b.mean_complexity : '') + (b.sample_class_names.length ? ' · ' + b.sample_class_names.join(', ') : '')"
+                        >
+                          <div
+                            class="w-full rounded-t-sm"
+                            :style="'height:' + Math.max(b.count / distMaxCount() * 138, b.count > 0 ? 2 : 0) + 'px; background-color: hsla(' + Math.round(i / 9 * 120) + ',65%,45%,0.78);'"
+                          ></div>
+                        </div>
+                      </template>
+                    </div>
+                    <!-- X-axis bucket labels -->
+                    <div class="flex gap-1 mt-1.5">
+                      <template x-for="(b, i) in report.distribution" :key="i">
+                        <div
+                          class="flex-1 text-center font-mono leading-tight"
+                          style="font-size: 9px; color: rgba(26, 26, 26, 0.4)"
+                          x-text="b.bucket_label"
+                        ></div>
+                      </template>
+                    </div>
+                    <!-- X-axis title -->
+                    <div
+                      class="text-center mt-1.5"
+                      style="
+                        font-size: 9px;
+                        letter-spacing: 0.08em;
+                        color: rgba(26, 26, 26, 0.35);
+                      "
+                    >
+                      QUALITY SCORE
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Drill-down -->
+            <div>
+              <div class="flex items-center gap-3 mb-4 text-sm">
+                <button @click="drillTo('project')" class="hover:text-ink">
+                  Project
+                </button>
+                <template x-if="drillPath.package">
+                  <span class="flex items-center gap-3">
+                    <span class="text-ink/30">/</span>
+                    <button
+                      @click="drillTo('package')"
+                      class="hover:text-ink"
+                      x-text="drillPath.package"
+                    ></button>
+                  </span>
+                </template>
+                <template x-if="drillPath.cls">
+                  <span class="flex items-center gap-3">
+                    <span class="text-ink/30">/</span>
+                    <span x-text="drillPath.cls"></span>
+                  </span>
+                </template>
+              </div>
+
+              <!-- Package list (when no package selected) -->
+              <div x-show="!drillPath.package" x-cloak>
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-display text-xl font-medium">Packages</h3>
+                  <div class="text-xs text-ink/50">
+                    Sorted by quality score &middot; click a row to drill in
+                  </div>
+                </div>
                 <div class="border border-ink/10 rounded-lg overflow-hidden">
                   <table class="w-full text-sm">
-                    <thead class="bg-ink/[0.02] text-xs uppercase tracking-wider text-ink/60">
+                    <thead
+                      class="bg-ink/[0.02] text-xs uppercase tracking-wider text-ink/60"
+                    >
                       <tr>
-                        <th class="text-left px-4 py-3 font-medium">Method</th>
+                        <th class="text-left px-4 py-3 font-medium">Package</th>
+                        <th class="text-right px-3 py-3 font-medium">
+                          Classes
+                        </th>
                         <th class="text-right px-3 py-3 font-medium">CC</th>
                         <th class="text-right px-3 py-3 font-medium">Line%</th>
-                        <th class="text-right px-3 py-3 font-medium">Branch%</th>
-                        <th class="text-right px-3 py-3 font-medium">Mean(L,B)</th>
+                        <th class="text-right px-3 py-3 font-medium">
+                          Branch%
+                        </th>
+                        <th class="text-right px-3 py-3 font-medium">
+                          Mean(L,B)
+                        </th>
+                        <th class="text-right px-3 py-3 font-medium">
+                          Meth. Mean
+                        </th>
+                        <th
+                          class="text-right px-3 py-3 font-medium"
+                          title="Geometric mean of instruction%, branch%, and line%. Collapses if any dimension is weak"
+                        >
+                          Geo Mean
+                        </th>
                         <th class="text-right px-3 py-3 font-medium">Score</th>
                         <th class="text-center px-3 py-3 font-medium">Grade</th>
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-ink/5 font-mono">
-                      <template x-for="m in methodsInClass()" :key="m.method_name + m.line_pct">
-                        <tr class="hover:bg-accent/5 transition">
-                          <td class="px-4 py-2 text-ink/80 font-sans truncate max-w-md" x-text="m.method_name"></td>
-                          <td class="px-3 py-2 text-right text-ink/60" x-text="m.complexity_total"></td>
-                          <td class="px-3 py-2 text-right" x-text="m.line_pct"></td>
-                          <td class="px-3 py-2 text-right" x-text="m.branch_pct"></td>
-                          <td class="px-3 py-2 text-right" x-text="m.mean_line_branch"></td>
-                          <td class="px-3 py-2 text-right font-medium" x-text="m.quality_score"></td>
-                          <td class="px-3 py-2 text-center">
-                            <span :class="gradeColor(m.quality_grade)"
-                                  class="inline-block w-5 h-5 rounded-full text-[10px] font-medium leading-5 text-center"
-                                  x-text="m.quality_grade"></span>
+                      <template
+                        x-for="p in sortedPackages()"
+                        :key="p.package_name"
+                      >
+                        <tr
+                          @click="drillPath.package = p.package_name"
+                          class="hover:bg-ink/5 cursor-pointer transition"
+                        >
+                          <td
+                            class="px-4 py-2.5 text-ink/80 font-sans"
+                            x-text="p.package_name"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right text-ink/60"
+                            x-text="p.n_classes"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right text-ink/60"
+                            x-text="p.complexity_total"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(p.line_pct)"
+                            x-text="p.line_pct"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(p.branch_pct)"
+                            x-text="p.branch_pct"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(p.mean_line_branch)"
+                            x-text="p.mean_line_branch"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(p.mean_method_cov)"
+                            x-text="p.mean_method_cov"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(p.coverage_geo_mean)"
+                            x-text="p.coverage_geo_mean"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right font-medium"
+                            :style="heatColor(p.quality_score)"
+                            x-text="p.quality_score"
+                          ></td>
+                          <td class="px-3 py-2.5 text-center">
+                            <span
+                              :class="gradeColor(p.quality_grade)"
+                              class="inline-block w-6 h-6 rounded-full text-xs font-medium leading-6 text-center"
+                              x-text="p.quality_grade"
+                            ></span>
                           </td>
                         </tr>
                       </template>
@@ -750,409 +692,991 @@
                   </table>
                 </div>
               </div>
+
+              <!-- Class list (when package selected, no class) -->
+              <div x-show="drillPath.package && !drillPath.cls" x-cloak>
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-display text-xl font-medium">
+                    Classes in
+                    <span
+                      class="font-mono text-base text-ink/70"
+                      x-text="drillPath.package"
+                    ></span>
+                  </h3>
+                  <button
+                    @click="explainPackage()"
+                    :disabled="!llmReady"
+                    class="text-sm text-ink hover:underline disabled:text-ink/30 disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    AI interpretation of this package &rarr;
+                  </button>
+                </div>
+                <div class="border border-ink/10 rounded-lg overflow-hidden">
+                  <table class="w-full text-sm">
+                    <thead
+                      class="bg-ink/[0.02] text-xs uppercase tracking-wider text-ink/60"
+                    >
+                      <tr>
+                        <th class="text-left px-4 py-3 font-medium">Class</th>
+                        <th class="text-right px-3 py-3 font-medium">CC</th>
+                        <th class="text-right px-3 py-3 font-medium">Line%</th>
+                        <th class="text-right px-3 py-3 font-medium">
+                          Branch%
+                        </th>
+                        <th class="text-right px-3 py-3 font-medium">
+                          Mean(L,B)
+                        </th>
+                        <th
+                          class="text-right px-3 py-3 font-medium"
+                          title="Geometric mean of instruction%, branch%, and line%. Collapses if any dimension is weak"
+                        >
+                          Geo Mean
+                        </th>
+                        <th
+                          class="text-right px-3 py-3 font-medium"
+                          title="Per-method mean instruction coverage, unweighted across methods"
+                        >
+                          Meth. Mean
+                        </th>
+                        <th
+                          class="text-right px-3 py-3 font-medium"
+                          title="Difference between per-method mean and class instruction%. Positive means large methods are better covered than small ones"
+                        >
+                          &Delta; Instr
+                        </th>
+                        <th class="text-right px-3 py-3 font-medium">Score</th>
+                        <th class="text-center px-3 py-3 font-medium">Grade</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-ink/5 font-mono">
+                      <template
+                        x-for="c in classesInPackage()"
+                        :key="c.class_name"
+                      >
+                        <tr
+                          @click="drillPath.cls = c.class_name"
+                          class="hover:bg-ink/5 cursor-pointer transition"
+                        >
+                          <td
+                            class="px-4 py-2.5 text-ink/80 font-sans"
+                            x-text="c.class_name"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right text-ink/60"
+                            x-text="c.complexity_total"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(c.line_pct)"
+                            x-text="c.line_pct"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(c.branch_pct)"
+                            x-text="c.branch_pct"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(c.mean_line_branch)"
+                            x-text="c.mean_line_branch"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(c.coverage_geo_mean)"
+                            x-text="c.coverage_geo_mean"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(c.mean_method_cov)"
+                            x-text="c.mean_method_cov"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right"
+                            :style="heatColor(c.mean_method_cov - c.instruction_pct, 'diff')"
+                            x-text="(c.mean_method_cov - c.instruction_pct).toFixed(1)"
+                          ></td>
+                          <td
+                            class="px-3 py-2.5 text-right font-medium"
+                            :style="heatColor(c.quality_score)"
+                            x-text="c.quality_score"
+                          ></td>
+                          <td class="px-3 py-2.5 text-center">
+                            <span
+                              :class="gradeColor(c.quality_grade)"
+                              class="inline-block w-6 h-6 rounded-full text-xs font-medium leading-6 text-center"
+                              x-text="c.quality_grade"
+                            ></span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <!-- Package-level LLM output panel -->
+                  <div
+                    x-show="llmStreaming || llmText"
+                    x-cloak
+                    class="mt-6 border border-ink/10 rounded-lg p-6 bg-ink/[0.02]"
+                  >
+                    <h4 class="font-display text-lg font-medium mb-3">
+                      AI interpretation
+                    </h4>
+                    <div
+                      class="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap"
+                      x-html="llmText"
+                    ></div>
+                    <div
+                      x-show="llmStreaming"
+                      class="mt-2 text-xs text-ink/40 animate-pulse"
+                    >
+                      Streaming&hellip;
+                    </div>
+                    <button
+                      x-show="llmText && !llmStreaming"
+                      @click="resetLlm(); explainPackage()"
+                      class="mt-3 text-xs text-ink/50 hover:text-ink"
+                    >
+                      Regenerate
+                    </button>
+                    <details x-show="llmPrompt" class="mt-4 text-xs">
+                      <summary
+                        class="cursor-pointer text-ink/50 hover:text-ink"
+                      >
+                        Show prompt sent to the model
+                      </summary>
+                      <div
+                        class="mt-2 p-3 bg-paper border border-ink/10 rounded font-mono whitespace-pre-wrap text-ink/70"
+                        x-text="llmPrompt"
+                      ></div>
+                    </details>
+                    <div
+                      x-show="llmReady"
+                      class="mt-6 pt-4 border-t border-ink/10"
+                    >
+                      <label
+                        class="text-xs uppercase tracking-wider text-ink/50"
+                        >Ask a follow-up</label
+                      >
+                      <textarea
+                        x-model="userQuestion"
+                        placeholder="e.g. Why might branch coverage be low here?"
+                        rows="2"
+                        class="w-full mt-2 p-2 text-sm border border-ink/10 rounded bg-paper focus:outline-none focus:border-ink/40"
+                      ></textarea>
+                      <button
+                        @click="askQuestion(report.packages.find(p => p.package_name === drillPath.package), 'package')"
+                        :disabled="!userQuestion.trim() || llmStreaming"
+                        class="mt-2 px-3 py-1.5 text-sm bg-ink text-paper rounded hover:bg-ink/80 transition disabled:bg-ink/20 disabled:cursor-not-allowed"
+                      >
+                        Ask
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Class detail (when class selected) -->
+              <div x-show="drillPath.cls" x-cloak>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <!-- Class metrics + radar -->
+                  <div
+                    class="lg:col-span-2 border border-ink/10 rounded-lg p-6"
+                  >
+                    <div class="flex items-center justify-between mb-6">
+                      <div>
+                        <div
+                          class="text-xs text-ink/50 uppercase tracking-wider"
+                        >
+                          Class
+                        </div>
+                        <h3
+                          class="font-display text-2xl font-medium"
+                          x-text="drillPath.cls"
+                        ></h3>
+                      </div>
+                      <div class="text-right">
+                        <div
+                          class="font-display text-5xl font-semibold"
+                          x-text="currentClass()?.quality_score"
+                        ></div>
+                        <div
+                          :class="gradeColor(currentClass()?.quality_grade)"
+                          class="inline-block px-3 py-0.5 rounded-full text-sm mt-1"
+                          x-text="'Grade ' + currentClass()?.quality_grade"
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div class="space-y-4 mb-6 text-sm">
+                      <div>
+                        <div
+                          class="text-xs uppercase tracking-wider text-ink/30 mb-2"
+                        >
+                          Raw JaCoCo
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                          <template x-for="m in classRawCards()" :key="m.key">
+                            <div class="border border-ink/5 rounded p-3">
+                              <div
+                                class="text-xs uppercase tracking-wider text-ink/50 mb-1"
+                                x-text="m.label"
+                              ></div>
+                              <div
+                                class="font-mono text-lg"
+                                x-text="m.value + (m.unit || '')"
+                              ></div>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                      <div class="pt-1 border-t border-ink/5">
+                        <div
+                          class="text-xs uppercase tracking-wider text-ink/30 mb-2"
+                        >
+                          Derived metrics
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                          <template
+                            x-for="m in classMetricCards()"
+                            :key="m.key"
+                          >
+                            <div class="border border-ink/5 rounded p-3">
+                              <div
+                                class="text-xs uppercase tracking-wider text-ink/50 mb-1"
+                                x-text="m.label"
+                              ></div>
+                              <div
+                                class="font-mono text-lg"
+                                x-text="m.value + (m.unit || '')"
+                              ></div>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+
+                    <canvas id="classRadar" style="max-height: 280px"></canvas>
+                  </div>
+
+                  <!-- LLM panel -->
+                  <div
+                    class="border border-ink/10 rounded-lg p-6 bg-ink/[0.02]"
+                  >
+                    <h4 class="font-display text-lg font-medium mb-1">
+                      AI interpretation
+                    </h4>
+                    <p class="text-xs text-ink/50 mb-4">
+                      Streamed from the model. Grounded only in the metrics
+                      above.
+                    </p>
+
+                    <button
+                      x-show="!llmText && !llmStreaming"
+                      @click="explainTarget(currentClass(), 'class')"
+                      :disabled="!llmReady"
+                      class="w-full px-4 py-2.5 bg-ink text-paper rounded text-sm hover:bg-ink/80 transition disabled:bg-ink/20 disabled:cursor-not-allowed"
+                    >
+                      Interpret this class
+                    </button>
+
+                    <div
+                      x-show="llmStreaming || llmText"
+                      class="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap"
+                      x-html="llmText"
+                    ></div>
+
+                    <button
+                      x-show="(llmText || llmStreaming) && !llmStreaming"
+                      @click="resetLlm(); explainTarget(currentClass(), 'class')"
+                      class="mt-3 text-xs text-ink/50 hover:text-ink"
+                    >
+                      Regenerate
+                    </button>
+
+                    <details x-show="llmPrompt" class="mt-4 text-xs">
+                      <summary
+                        class="cursor-pointer text-ink/50 hover:text-ink"
+                      >
+                        Show prompt sent to the model
+                      </summary>
+                      <div
+                        class="mt-2 p-3 bg-paper border border-ink/10 rounded font-mono whitespace-pre-wrap"
+                        x-text="llmPrompt"
+                      ></div>
+                    </details>
+
+                    <!-- Free-form question -->
+                    <div
+                      x-show="llmReady"
+                      class="mt-6 pt-6 border-t border-ink/10"
+                    >
+                      <label
+                        class="text-xs uppercase tracking-wider text-ink/50"
+                        >Ask a follow-up</label
+                      >
+                      <textarea
+                        x-model="userQuestion"
+                        placeholder="e.g. Why might this branch coverage be low?"
+                        rows="2"
+                        class="w-full mt-2 p-2 text-sm border border-ink/10 rounded bg-paper focus:outline-none focus:border-ink/40"
+                      ></textarea>
+                      <button
+                        @click="askQuestion(currentClass(), 'class')"
+                        :disabled="!userQuestion.trim() || llmStreaming"
+                        class="mt-2 px-3 py-1.5 text-sm bg-ink text-paper rounded hover:bg-ink/80 transition disabled:bg-ink/20 disabled:cursor-not-allowed"
+                      >
+                        Ask
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Methods table -->
+                <div class="mt-8">
+                  <h4 class="font-display text-lg font-medium mb-4">Methods</h4>
+                  <div class="border border-ink/10 rounded-lg overflow-hidden">
+                    <table class="w-full text-sm">
+                      <thead
+                        class="bg-ink/[0.02] text-xs uppercase tracking-wider text-ink/60"
+                      >
+                        <tr>
+                          <th class="text-left px-4 py-3 font-medium">
+                            Method
+                          </th>
+                          <th class="text-right px-3 py-3 font-medium">CC</th>
+                          <th class="text-right px-3 py-3 font-medium">
+                            Line%
+                          </th>
+                          <th class="text-right px-3 py-3 font-medium">
+                            Branch%
+                          </th>
+                          <th class="text-right px-3 py-3 font-medium">
+                            Mean(L,B)
+                          </th>
+                          <th class="text-right px-3 py-3 font-medium">
+                            Score
+                          </th>
+                          <th class="text-center px-3 py-3 font-medium">
+                            Grade
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-ink/5 font-mono">
+                        <template
+                          x-for="m in methodsInClass()"
+                          :key="m.method_name + m.line_pct"
+                        >
+                          <tr class="hover:bg-ink/5 transition">
+                            <td
+                              class="px-4 py-2 text-ink/80 font-sans truncate max-w-md"
+                              x-text="m.method_name"
+                            ></td>
+                            <td
+                              class="px-3 py-2 text-right text-ink/60"
+                              x-text="m.complexity_total"
+                            ></td>
+                            <td
+                              class="px-3 py-2 text-right"
+                              x-text="m.line_pct"
+                            ></td>
+                            <td
+                              class="px-3 py-2 text-right"
+                              x-text="m.branch_pct"
+                            ></td>
+                            <td
+                              class="px-3 py-2 text-right"
+                              x-text="m.mean_line_branch"
+                            ></td>
+                            <td
+                              class="px-3 py-2 text-right font-medium"
+                              x-text="m.quality_score"
+                            ></td>
+                            <td class="px-3 py-2 text-center">
+                              <span
+                                :class="gradeColor(m.quality_grade)"
+                                class="inline-block w-5 h-5 rounded-full text-[10px] font-medium leading-5 text-center"
+                                x-text="m.quality_grade"
+                              ></span>
+                            </td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
+        <!-- ============ COMPARE VIEW ============ -->
+        <section x-show="view === 'compare'" x-cloak>
+          <div x-show="!comparison" class="max-w-2xl mx-auto text-center py-20">
+            <p class="text-ink/60 text-lg mb-12 max-w-lg mx-auto">
+              Upload two JaCoCo XML reports, different projects or two versions
+              of the same one, and let the model identify meaningful differences.
+            </p>
 
-      <!-- ============ COMPARE VIEW ============ -->
-      <section x-show="view === 'compare'" x-cloak>
+            <div class="grid grid-cols-2 gap-4 max-w-md mx-auto">
+              <label class="cursor-pointer group">
+                <input
+                  type="file"
+                  accept=".xml"
+                  class="hidden"
+                  x-ref="cmpInputA"
+                  @change="cmpFileA = $event.target.files[0]; tryCompare()"
+                />
+                <div
+                  :class="cmpFileA ? 'border-ink text-ink' : 'border-ink/20 hover:border-ink/40'"
+                  class="border-2 border-dashed rounded-lg p-6 text-sm transition"
+                >
+                  <div class="text-xs uppercase tracking-wider mb-2">
+                    Report A
+                  </div>
+                  <div
+                    class="truncate"
+                    x-text="cmpFileA?.name || 'Choose XML…'"
+                  ></div>
+                </div>
+              </label>
+              <label class="cursor-pointer group">
+                <input
+                  type="file"
+                  accept=".xml"
+                  class="hidden"
+                  x-ref="cmpInputB"
+                  @change="cmpFileB = $event.target.files[0]; tryCompare()"
+                />
+                <div
+                  :class="cmpFileB ? 'border-ink text-ink' : 'border-ink/20 hover:border-ink/40'"
+                  class="border-2 border-dashed rounded-lg p-6 text-sm transition"
+                >
+                  <div class="text-xs uppercase tracking-wider mb-2">
+                    Report B
+                  </div>
+                  <div
+                    class="truncate"
+                    x-text="cmpFileB?.name || 'Choose XML…'"
+                  ></div>
+                </div>
+              </label>
+            </div>
+            <p x-show="loading" class="mt-6 text-sm text-ink/60">
+              Parsing both&hellip;
+            </p>
+            <p
+              x-show="cmpError"
+              class="mt-6 text-sm text-red-700"
+              x-text="cmpError"
+            ></p>
+          </div>
 
-        <div x-show="!comparison" class="max-w-2xl mx-auto text-center py-20">
-          <h2 class="font-display text-5xl font-medium tracking-tight mb-4">
-            Compare two reports,<br/>
-            <span class="italic text-accent">side by side.</span>
+          <div x-show="comparison" x-cloak class="space-y-8">
+            <!-- Compact header: A and B summary cards -->
+            <div class="grid grid-cols-2 gap-4">
+              <div class="border border-ink/10 rounded-lg p-5">
+                <div class="text-xs uppercase tracking-wider text-ink/40 mb-1">
+                  Report A
+                </div>
+                <div
+                  class="font-mono text-xs text-ink/40 truncate mb-3"
+                  x-text="comparison.a._filename"
+                ></div>
+                <div class="flex items-baseline gap-3 mb-2">
+                  <div
+                    class="font-display text-5xl font-semibold"
+                    x-text="comparison.a.project.quality_score"
+                  ></div>
+                  <div
+                    :class="gradeColor(comparison.a.project.quality_grade)"
+                    class="font-display text-2xl font-semibold px-2 py-0.5 rounded"
+                    x-text="comparison.a.project.quality_grade"
+                  ></div>
+                </div>
+                <div
+                  class="text-sm text-ink/70 font-medium mb-4"
+                  x-text="comparison.a.project.project_name"
+                ></div>
+                <div class="grid grid-cols-3 gap-2 text-xs text-ink/60">
+                  <div>
+                    <div class="text-ink/40 mb-0.5">Line</div>
+                    <div
+                      class="font-mono"
+                      x-text="comparison.a.project.line_pct + '%'"
+                    ></div>
+                  </div>
+                  <div>
+                    <div class="text-ink/40 mb-0.5">Branch</div>
+                    <div
+                      class="font-mono"
+                      x-text="comparison.a.project.branch_pct + '%'"
+                    ></div>
+                  </div>
+                  <div>
+                    <div class="text-ink/40 mb-0.5">Packages</div>
+                    <div
+                      class="font-mono"
+                      x-text="comparison.a.project.n_packages"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              <div class="border border-ink/10 rounded-lg p-5">
+                <div class="text-xs uppercase tracking-wider text-ink/40 mb-1">
+                  Report B
+                </div>
+                <div
+                  class="font-mono text-xs text-ink/40 truncate mb-3"
+                  x-text="comparison.b._filename"
+                ></div>
+                <div class="flex items-baseline gap-3 mb-2">
+                  <div
+                    class="font-display text-5xl font-semibold"
+                    x-text="comparison.b.project.quality_score"
+                  ></div>
+                  <div
+                    :class="gradeColor(comparison.b.project.quality_grade)"
+                    class="font-display text-2xl font-semibold px-2 py-0.5 rounded"
+                    x-text="comparison.b.project.quality_grade"
+                  ></div>
+                </div>
+                <div
+                  class="text-sm text-ink/70 font-medium mb-4"
+                  x-text="comparison.b.project.project_name"
+                ></div>
+                <div class="grid grid-cols-3 gap-2 text-xs text-ink/60">
+                  <div>
+                    <div class="text-ink/40 mb-0.5">Line</div>
+                    <div
+                      class="font-mono"
+                      x-text="comparison.b.project.line_pct + '%'"
+                    ></div>
+                  </div>
+                  <div>
+                    <div class="text-ink/40 mb-0.5">Branch</div>
+                    <div
+                      class="font-mono"
+                      x-text="comparison.b.project.branch_pct + '%'"
+                    ></div>
+                  </div>
+                  <div>
+                    <div class="text-ink/40 mb-0.5">Packages</div>
+                    <div
+                      class="font-mono"
+                      x-text="comparison.b.project.n_packages"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- key metric deltas -->
+            <div class="border border-ink/10 rounded-lg p-5">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-display text-lg font-medium">What changed</h3>
+                <span class="text-xs text-ink/40">B &minus; A</span>
+              </div>
+              <div class="grid grid-cols-4 gap-2 md:grid-cols-8">
+                <template x-for="m in compareMetrics()" :key="m.key">
+                  <div
+                    class="text-center border border-ink/5 rounded-lg py-3 px-1"
+                  >
+                    <div
+                      class="text-[9px] uppercase tracking-wider text-ink/40 mb-1.5 leading-tight"
+                      x-text="m.label"
+                    ></div>
+                    <div
+                      class="font-mono text-base font-semibold leading-none"
+                      :class="compareDeltaClass(m.b - m.a)"
+                      x-text="compareDeltaLabel(m.b - m.a)"
+                    ></div>
+                    <div
+                      class="text-[9px] font-mono text-ink/30 mt-1.5 leading-tight"
+                      x-text="m.a + ' → ' + m.b"
+                    ></div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Side-by-side metric bars (pure CSS) -->
+            <div class="border border-ink/10 rounded-lg p-6">
+              <div class="flex items-center justify-between mb-5">
+                <h3 class="font-display text-lg font-medium">
+                  Side-by-side metrics
+                </h3>
+                <div class="flex gap-5 text-xs text-ink/50">
+                  <div class="flex items-center gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-sm bg-ink/70"></div>
+                    <span
+                      x-text="comparison.a.project.project_name + ' (A)'"
+                    ></span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-sm bg-blue-500/70"></div>
+                    <span
+                      x-text="comparison.b.project.project_name + ' (B)'"
+                    ></span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex gap-1.5">
+                <template x-for="m in compareMetrics()" :key="m.key">
+                  <div class="flex-1 flex flex-col items-center">
+                    <!-- Values A / B above bars -->
+                    <div class="flex gap-0.5 w-full font-mono mb-1">
+                      <span
+                        class="flex-1 text-center text-[9px] text-ink/60"
+                        x-text="m.a"
+                      ></span>
+                      <span
+                        class="flex-1 text-center text-[9px] text-blue-500/80"
+                        x-text="m.b"
+                      ></span>
+                    </div>
+                    <!-- Bars growing upward from baseline -->
+                    <div
+                      class="flex gap-0.5 w-full border-b border-ink/20"
+                      style="height: 128px"
+                    >
+                      <div
+                        class="flex-1 flex flex-col justify-end bg-ink/5 rounded-t-sm overflow-hidden"
+                      >
+                        <div
+                          class="bg-ink/70 w-full transition-all"
+                          :style="'height:' + m.a + '%'"
+                        ></div>
+                      </div>
+                      <div
+                        class="flex-1 flex flex-col justify-end bg-ink/5 rounded-t-sm overflow-hidden"
+                      >
+                        <div
+                          class="bg-blue-500/70 w-full transition-all"
+                          :style="'height:' + m.b + '%'"
+                        ></div>
+                      </div>
+                    </div>
+                    <!-- Metric label -->
+                    <div
+                      class="text-[9px] text-ink/60 text-center mt-1.5 leading-tight w-full"
+                      x-text="m.label"
+                    ></div>
+                    <!-- Delta -->
+                    <div
+                      class="text-[9px] font-mono text-center mt-0.5"
+                      :class="compareDeltaClass(m.b - m.a)"
+                      x-text="compareDeltaLabel(m.b - m.a)"
+                    ></div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Package breakdown table -->
+            <div class="border border-ink/10 rounded-lg overflow-hidden">
+              <div class="px-5 py-4 border-b border-ink/10">
+                <h3 class="font-display text-lg font-medium">
+                  Package breakdown
+                </h3>
+                <p class="text-xs text-ink/50 mt-0.5">
+                  <span
+                    x-text="cmpMatchCount() + ' package' + (cmpMatchCount() !== 1 ? 's' : '') + ' matched between reports'"
+                  ></span>
+                  <template
+                    x-if="(comparedPackages || []).filter(p => p.status === 'new').length > 0"
+                  >
+                    <span
+                      x-text="' · ' + (comparedPackages || []).filter(p => p.status === 'new').length + ' new in B'"
+                    ></span>
+                  </template>
+                  <template
+                    x-if="(comparedPackages || []).filter(p => p.status === 'removed').length > 0"
+                  >
+                    <span
+                      x-text="' · ' + (comparedPackages || []).filter(p => p.status === 'removed').length + ' removed from B'"
+                    ></span>
+                  </template>
+                  <span x-show="cmpMatchCount() === 0" class="text-amber-600">
+                    &nbsp;No matching package names; these reports may be from different projects.
+                  </span>
+                </p>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead
+                    class="bg-ink/[0.02] text-xs uppercase tracking-wider text-ink/60"
+                  >
+                    <tr>
+                      <th class="text-left px-4 py-3 font-medium">Package</th>
+                      <th class="text-right px-3 py-3 font-medium">Score A</th>
+                      <th class="text-right px-3 py-3 font-medium">Score B</th>
+                      <th class="text-center px-3 py-3 font-medium">
+                        &Delta; Score
+                      </th>
+                      <th class="text-center px-3 py-3 font-medium">Grade</th>
+                      <th class="text-right px-3 py-3 font-medium">Line A</th>
+                      <th class="text-right px-3 py-3 font-medium">Line B</th>
+                      <th class="text-center px-3 py-3 font-medium">
+                        &Delta; Line
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-ink/5 font-mono text-xs">
+                    <template
+                      x-for="p in (comparedPackages || [])"
+                      :key="p.name"
+                    >
+                      <tr
+                        :class="p.delta_score !== null && p.delta_score <= -1 ? 'bg-red-50/50' :
+                                p.delta_score !== null && p.delta_score >= 1  ? 'bg-green-50/50' : ''"
+                      >
+                        <td class="px-4 py-2.5 font-sans text-ink/80 text-xs">
+                          <span x-text="p.name"></span>
+                          <span
+                            x-show="p.status === 'new'"
+                            class="ml-2 text-[9px] uppercase tracking-wider bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-sans font-medium"
+                            >new</span
+                          >
+                          <span
+                            x-show="p.status === 'removed'"
+                            class="ml-2 text-[9px] uppercase tracking-wider bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-sans font-medium"
+                            >removed</span
+                          >
+                        </td>
+                        <td
+                          class="px-3 py-2.5 text-right text-ink/60"
+                          x-text="p.score_a ?? '-'"
+                        ></td>
+                        <td
+                          class="px-3 py-2.5 text-right text-ink/60"
+                          x-text="p.score_b ?? '-'"
+                        ></td>
+                        <td
+                          class="px-3 py-2.5 text-center font-semibold"
+                          :class="compareDeltaClass(p.delta_score)"
+                          x-text="compareDeltaLabel(p.delta_score)"
+                        ></td>
+                        <td class="px-3 py-2.5 text-center">
+                          <span
+                            x-show="p.grade_a"
+                            :class="gradeColor(p.grade_a)"
+                            class="inline-block w-5 h-5 rounded-full text-[10px] font-medium leading-5 text-center"
+                            x-text="p.grade_a"
+                          ></span>
+                          <span
+                            x-show="p.grade_a && p.grade_b"
+                            class="text-ink/20 text-xs mx-0.5"
+                            >&rarr;</span
+                          >
+                          <span
+                            x-show="p.grade_b"
+                            :class="gradeColor(p.grade_b)"
+                            class="inline-block w-5 h-5 rounded-full text-[10px] font-medium leading-5 text-center"
+                            x-text="p.grade_b"
+                          ></span>
+                        </td>
+                        <td
+                          class="px-3 py-2.5 text-right text-ink/60"
+                          x-text="p.line_a ?? '-'"
+                        ></td>
+                        <td
+                          class="px-3 py-2.5 text-right text-ink/60"
+                          x-text="p.line_b ?? '-'"
+                        ></td>
+                        <td
+                          class="px-3 py-2.5 text-center font-semibold"
+                          :class="compareDeltaClass(p.delta_line)"
+                          x-text="compareDeltaLabel(p.delta_line)"
+                        ></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- AI comparison panel -->
+            <div class="border border-ink/10 rounded-lg p-6 bg-ink/[0.02]">
+              <h3 class="font-display text-lg font-medium mb-1">
+                AI comparison
+              </h3>
+              <p class="text-xs text-ink/50 mb-4"></p>
+              <button
+                x-show="!llmText && !llmStreaming"
+                @click="explainComparison()"
+                :disabled="!llmReady"
+                class="px-4 py-2.5 bg-ink text-paper rounded text-sm hover:bg-ink/80 transition disabled:bg-ink/20 disabled:cursor-not-allowed"
+              >
+                Compare these reports
+              </button>
+              <div
+                x-show="llmStreaming || llmText"
+                class="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap"
+                x-html="llmText"
+              ></div>
+            </div>
+
+            <button
+              @click="resetCompare()"
+              class="text-sm text-ink/50 hover:text-ink"
+            >
+              Compare different reports
+            </button>
+          </div>
+        </section>
+
+        <!-- ============ ABOUT VIEW ============ -->
+        <section
+          x-show="view === 'about'"
+          x-cloak
+          class="prose-thesis max-w-3xl"
+        >
+          <h2 class="font-display text-4xl font-medium tracking-tight mb-6">
+            About this tool
           </h2>
-          <p class="text-ink/60 text-lg mb-12 max-w-lg mx-auto">
-            Upload two JaCoCo XML reports — different projects, or two
-            versions of the same one — and let the model identify
-            meaningful differences.
+
+          <p class="text-ink/70 text-lg mb-6">
+            A coverage report interpretation tool developed as part of a
+            bachelor's thesis on extending JaCoCo's standard metrics with
+            derived measures, augmented by an LLM interpretation layer.
           </p>
 
-          <div class="grid grid-cols-2 gap-4 max-w-md mx-auto">
-            <label class="cursor-pointer group">
-              <input type="file" accept=".xml" class="hidden" x-ref="cmpInputA"
-                     @change="cmpFileA = $event.target.files[0]; tryCompare()">
-              <div :class="cmpFileA ? 'border-accent text-accent' : 'border-ink/20 hover:border-ink/40'"
-                   class="border-2 border-dashed rounded-lg p-6 text-sm transition">
-                <div class="text-xs uppercase tracking-wider mb-2">Report A</div>
-                <div class="truncate" x-text="cmpFileA?.name || 'Choose XML…'"></div>
-              </div>
-            </label>
-            <label class="cursor-pointer group">
-              <input type="file" accept=".xml" class="hidden" x-ref="cmpInputB"
-                     @change="cmpFileB = $event.target.files[0]; tryCompare()">
-              <div :class="cmpFileB ? 'border-accent text-accent' : 'border-ink/20 hover:border-ink/40'"
-                   class="border-2 border-dashed rounded-lg p-6 text-sm transition">
-                <div class="text-xs uppercase tracking-wider mb-2">Report B</div>
-                <div class="truncate" x-text="cmpFileB?.name || 'Choose XML…'"></div>
-              </div>
-            </label>
-          </div>
-          <p x-show="loading" class="mt-6 text-sm text-ink/60">Parsing both&hellip;</p>
-          <p x-show="cmpError" class="mt-6 text-sm text-red-700" x-text="cmpError"></p>
-        </div>
+          <h3 class="font-display text-xl font-medium mt-10 mb-3">
+            What it does
+          </h3>
+          <ul class="text-sm text-ink/70 space-y-2 list-disc pl-5">
+            <li>
+              <span class="font-medium text-ink">Single-report analysis</span>:
+              upload a JaCoCo XML and get a full breakdown: composite quality
+              score and grade (A–F), all derived metrics at project, package,
+              class, and method level. Click any package or class to drill in.
+            </li>
+            <li>
+              <span class="font-medium text-ink">Hotspot detection</span>: four
+              risk categories (coverage gap risk, branch blind spots, shallow
+              tests, untested complexity) automatically flag the classes most
+              likely to harbour untested behaviour, filtered to classes with
+              cyclomatic complexity &ge; 3.
+            </li>
+            <li>
+              <span class="font-medium text-ink">Quality distribution</span>:
+              histogram showing how classes spread across quality score buckets,
+              so you can see whether low scores are isolated outliers or a
+              systemic pattern.
+            </li>
+            <li>
+              <span class="font-medium text-ink">Side-by-side comparison</span>:
+              upload two JaCoCo XMLs to compare metrics between projects, or
+              before and after a refactor, with per-metric delta highlighting.
+            </li>
+            <li>
+              <span class="font-medium text-ink">AI interpretation</span>: any
+              metric view can be sent to an LLM for a natural-language reading.
+              The exact prompt is always inspectable via the "Show prompt" toggle.
+            </li>
+          </ul>
 
-        <div x-show="comparison" x-cloak class="space-y-8">
-
-          <!-- Compact header: A and B summary cards -->
-          <div class="grid grid-cols-2 gap-4">
-            <div class="border border-ink/10 rounded-lg p-5">
-              <div class="text-xs uppercase tracking-wider text-ink/40 mb-1">Report A</div>
-              <div class="font-mono text-xs text-ink/40 truncate mb-3"
-                   x-text="comparison.a._filename"></div>
-              <div class="flex items-baseline gap-3 mb-2">
-                <div class="font-display text-5xl font-semibold"
-                     x-text="comparison.a.project.quality_score"></div>
-                <div :class="gradeColor(comparison.a.project.quality_grade)"
-                     class="font-display text-2xl font-semibold px-2 py-0.5 rounded"
-                     x-text="comparison.a.project.quality_grade"></div>
-              </div>
-              <div class="text-sm text-ink/70 font-medium mb-4"
-                   x-text="comparison.a.project.project_name"></div>
-              <div class="grid grid-cols-3 gap-2 text-xs text-ink/60">
-                <div>
-                  <div class="text-ink/40 mb-0.5">Line</div>
-                  <div class="font-mono" x-text="comparison.a.project.line_pct + '%'"></div>
-                </div>
-                <div>
-                  <div class="text-ink/40 mb-0.5">Branch</div>
-                  <div class="font-mono" x-text="comparison.a.project.branch_pct + '%'"></div>
-                </div>
-                <div>
-                  <div class="text-ink/40 mb-0.5">Packages</div>
-                  <div class="font-mono" x-text="comparison.a.project.n_packages"></div>
-                </div>
-              </div>
-            </div>
-            <div class="border border-ink/10 rounded-lg p-5">
-              <div class="text-xs uppercase tracking-wider text-ink/40 mb-1">Report B</div>
-              <div class="font-mono text-xs text-ink/40 truncate mb-3"
-                   x-text="comparison.b._filename"></div>
-              <div class="flex items-baseline gap-3 mb-2">
-                <div class="font-display text-5xl font-semibold"
-                     x-text="comparison.b.project.quality_score"></div>
-                <div :class="gradeColor(comparison.b.project.quality_grade)"
-                     class="font-display text-2xl font-semibold px-2 py-0.5 rounded"
-                     x-text="comparison.b.project.quality_grade"></div>
-              </div>
-              <div class="text-sm text-ink/70 font-medium mb-4"
-                   x-text="comparison.b.project.project_name"></div>
-              <div class="grid grid-cols-3 gap-2 text-xs text-ink/60">
-                <div>
-                  <div class="text-ink/40 mb-0.5">Line</div>
-                  <div class="font-mono" x-text="comparison.b.project.line_pct + '%'"></div>
-                </div>
-                <div>
-                  <div class="text-ink/40 mb-0.5">Branch</div>
-                  <div class="font-mono" x-text="comparison.b.project.branch_pct + '%'"></div>
-                </div>
-                <div>
-                  <div class="text-ink/40 mb-0.5">Packages</div>
-                  <div class="font-mono" x-text="comparison.b.project.n_packages"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Key metric deltas — what changed at the project level -->
-          <div class="border border-ink/10 rounded-lg p-5">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-display text-lg font-medium">What changed</h3>
-              <span class="text-xs text-ink/40">B &minus; A</span>
-            </div>
-            <div class="grid grid-cols-4 gap-2 md:grid-cols-8">
-              <template x-for="m in compareMetrics()" :key="m.key">
-                <div class="text-center border border-ink/5 rounded-lg py-3 px-1">
-                  <div class="text-[9px] uppercase tracking-wider text-ink/40 mb-1.5 leading-tight"
-                       x-text="m.label"></div>
-                  <div class="font-mono text-base font-semibold leading-none"
-                       :class="compareDeltaClass(m.b - m.a)"
-                       x-text="compareDeltaLabel(m.b - m.a)"></div>
-                  <div class="text-[9px] font-mono text-ink/30 mt-1.5 leading-tight"
-                       x-text="m.a + ' → ' + m.b"></div>
-                </div>
-              </template>
-            </div>
-          </div>
-
-          <!-- Side-by-side metric bars (pure CSS) -->
-          <div class="border border-ink/10 rounded-lg p-6">
-            <div class="flex items-center justify-between mb-5">
-              <h3 class="font-display text-lg font-medium">Side-by-side metrics</h3>
-              <div class="flex gap-5 text-xs text-ink/50">
-                <div class="flex items-center gap-1.5">
-                  <div class="w-2.5 h-2.5 rounded-sm bg-ink/70"></div>
-                  <span x-text="comparison.a.project.project_name + ' (A)'"></span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <div class="w-2.5 h-2.5 rounded-sm bg-accent/70"></div>
-                  <span x-text="comparison.b.project.project_name + ' (B)'"></span>
-                </div>
-              </div>
-            </div>
-            <div class="space-y-3">
-              <template x-for="m in compareMetrics()" :key="m.key">
-                <div class="grid items-center gap-x-3 text-xs"
-                     style="grid-template-columns: 96px 1fr 40px 1fr 40px 48px">
-                  <div class="text-ink/60 truncate text-right" x-text="m.label"></div>
-                  <div class="h-4 bg-ink/5 rounded-sm overflow-hidden">
-                    <div class="h-full bg-ink/70 rounded-sm transition-all"
-                         :style="'width:' + m.a + '%'"></div>
-                  </div>
-                  <div class="font-mono text-right text-ink/70" x-text="m.a"></div>
-                  <div class="h-4 bg-ink/5 rounded-sm overflow-hidden">
-                    <div class="h-full bg-accent/70 rounded-sm transition-all"
-                         :style="'width:' + m.b + '%'"></div>
-                  </div>
-                  <div class="font-mono text-right text-ink/70" x-text="m.b"></div>
-                  <div class="font-mono text-right"
-                       :class="compareDeltaClass(m.b - m.a)"
-                       x-text="compareDeltaLabel(m.b - m.a)"></div>
-                </div>
-              </template>
-            </div>
-            <div class="mt-3 text-right text-xs text-ink/30">B &minus; A</div>
-          </div>
-
-          <!-- Package breakdown table -->
-          <div class="border border-ink/10 rounded-lg overflow-hidden">
-            <div class="px-5 py-4 border-b border-ink/10">
-              <h3 class="font-display text-lg font-medium">Package breakdown</h3>
-              <p class="text-xs text-ink/50 mt-0.5">
-                <span x-text="cmpMatchCount() + ' package' + (cmpMatchCount() !== 1 ? 's' : '') + ' matched between reports'"></span>
-                <template x-if="(comparedPackages || []).filter(p => p.status === 'new').length > 0">
-                  <span x-text="' · ' + (comparedPackages || []).filter(p => p.status === 'new').length + ' new in B'"></span>
-                </template>
-                <template x-if="(comparedPackages || []).filter(p => p.status === 'removed').length > 0">
-                  <span x-text="' · ' + (comparedPackages || []).filter(p => p.status === 'removed').length + ' removed from B'"></span>
-                </template>
-                <span x-show="cmpMatchCount() === 0" class="text-amber-600">
-                  &nbsp;&mdash; no matching package names; these reports may be from different projects.
-                </span>
+          <h3 class="font-display text-xl font-medium mt-10 mb-3">
+            The metrics
+          </h3>
+          <div class="space-y-5 text-sm text-ink/70">
+            <div>
+              <div class="font-medium text-ink">Mean(line, branch), used in quality score</div>
+              <p class="font-mono text-xs mt-1 mb-1 p-2 bg-ink/[0.04] rounded">
+                (line% + branch%) / 2
+              </p>
+              <p>
+                Arithmetic mean of JaCoCo's line and branch coverage percentages.
+                Surfaces the common pathology of high line coverage paired with low
+                branch coverage in a single number. Classes with no branch counter
+                are treated as 100% branch coverage, following JaCoCo's convention.
               </p>
             </div>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead class="bg-ink/[0.02] text-xs uppercase tracking-wider text-ink/60">
-                  <tr>
-                    <th class="text-left px-4 py-3 font-medium">Package</th>
-                    <th class="text-right px-3 py-3 font-medium">Score A</th>
-                    <th class="text-right px-3 py-3 font-medium">Score B</th>
-                    <th class="text-center px-3 py-3 font-medium">&Delta; Score</th>
-                    <th class="text-center px-3 py-3 font-medium">Grade</th>
-                    <th class="text-right px-3 py-3 font-medium">Line A</th>
-                    <th class="text-right px-3 py-3 font-medium">Line B</th>
-                    <th class="text-center px-3 py-3 font-medium">&Delta; Line</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-ink/5 font-mono text-xs">
-                  <template x-for="p in (comparedPackages || [])" :key="p.name">
-                    <tr :class="p.delta_score !== null && p.delta_score <= -1 ? 'bg-red-50/50' :
-                                p.delta_score !== null && p.delta_score >= 1  ? 'bg-green-50/50' : ''">
-                      <td class="px-4 py-2.5 font-sans text-ink/80 text-xs">
-                        <span x-text="p.name"></span>
-                        <span x-show="p.status === 'new'"
-                              class="ml-2 text-[9px] uppercase tracking-wider bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-sans font-medium">new</span>
-                        <span x-show="p.status === 'removed'"
-                              class="ml-2 text-[9px] uppercase tracking-wider bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-sans font-medium">removed</span>
-                      </td>
-                      <td class="px-3 py-2.5 text-right text-ink/60" x-text="p.score_a ?? '—'"></td>
-                      <td class="px-3 py-2.5 text-right text-ink/60" x-text="p.score_b ?? '—'"></td>
-                      <td class="px-3 py-2.5 text-center font-semibold"
-                          :class="compareDeltaClass(p.delta_score)"
-                          x-text="compareDeltaLabel(p.delta_score)"></td>
-                      <td class="px-3 py-2.5 text-center">
-                        <span x-show="p.grade_a"
-                              :class="gradeColor(p.grade_a)"
-                              class="inline-block w-5 h-5 rounded-full text-[10px] font-medium leading-5 text-center"
-                              x-text="p.grade_a"></span>
-                        <span x-show="p.grade_a && p.grade_b" class="text-ink/20 text-xs mx-0.5">&rarr;</span>
-                        <span x-show="p.grade_b"
-                              :class="gradeColor(p.grade_b)"
-                              class="inline-block w-5 h-5 rounded-full text-[10px] font-medium leading-5 text-center"
-                              x-text="p.grade_b"></span>
-                      </td>
-                      <td class="px-3 py-2.5 text-right text-ink/60" x-text="p.line_a ?? '—'"></td>
-                      <td class="px-3 py-2.5 text-right text-ink/60" x-text="p.line_b ?? '—'"></td>
-                      <td class="px-3 py-2.5 text-center font-semibold"
-                          :class="compareDeltaClass(p.delta_line)"
-                          x-text="compareDeltaLabel(p.delta_line)"></td>
-                    </tr>
-                  </template>
-                </tbody>
-              </table>
+
+            <div>
+              <div class="font-medium text-ink">Geometric mean of coverage dimensions, used in quality score</div>
+              <p class="font-mono text-xs mt-1 mb-1 p-2 bg-ink/[0.04] rounded">
+                (instr% &times; branch% &times; line%)^(1/3)
+              </p>
+              <p>
+                Geometric mean of instruction, branch, and line coverage. Each
+                dimension is clamped to a minimum of 1% before the product is taken.
+                The geometric mean disproportionately punishes weakness in any single
+                dimension: a class with 100% line and instruction but 10% branch
+                scores &approx;46% versus 70% under a simple mean. METHOD is excluded
+                because compiler-generated synthetic and bridge methods would distort it.
+              </p>
+            </div>
+
+            <div>
+              <div class="font-medium text-ink">
+                Method mean instruction coverage
+                (<span class="font-mono text-xs">mean_method_cov</span>), used in quality score
+              </div>
+              <p class="font-mono text-xs mt-1 mb-1 p-2 bg-ink/[0.04] rounded">
+                (1 / N) &times; &Sigma; instruction%(method<sub>i</sub>)
+              </p>
+              <p>
+                Unweighted mean of instruction coverage across all <em>N</em> methods.
+                Unlike class-level instruction coverage (where large methods dominate),
+                every method contributes equally regardless of size. A class with one
+                large 200-instruction method at 0% and ten small methods at 100% gives
+                <span class="font-mono text-xs">instruction% = 20%</span> but
+                <span class="font-mono text-xs">method mean = 91%</span>, exposing
+                the untested large method that the headline number masks.
+              </p>
+            </div>
+
+            <div>
+              <div class="font-medium text-ink">&Delta;&thinsp;Instr, display only, not in quality score</div>
+              <p class="font-mono text-xs mt-1 mb-1 p-2 bg-ink/[0.04] rounded">
+                mean_method_cov &minus; instruction_pct
+              </p>
+              <p>
+                Signed difference between the per-method mean and JaCoCo's
+                size-weighted class instruction coverage. A <strong>positive</strong>
+                value means small methods are better covered than large ones. A
+                <strong>negative</strong> value means large methods carry the coverage
+                while smaller methods go untested. Near zero means coverage is
+                distributed evenly across method sizes.
+              </p>
+            </div>
+
+            <div>
+              <div class="font-medium text-ink">Quality score, composite</div>
+              <p class="font-mono text-xs mt-1 mb-1 p-2 bg-ink/[0.04] rounded">
+                0.35 &times; Mean(L,B) + 0.35 &times; Geo mean + 0.30 &times; Meth. mean
+              </p>
+              <p class="mt-1">
+                Computed per class, then rolled up to package and project via
+                <span class="font-medium text-ink">complexity-weighted averaging</span>.
+                Each class is weighted by its cyclomatic complexity total, so a package
+                with one complex class at 60% and ten trivial classes at 100% reports
+                closer to 60%, not 96%.
+                Grades: A &ge; 90, B &ge; 80, C &ge; 70, D &ge; 60, F &lt; 60.
+              </p>
             </div>
           </div>
 
-          <!-- AI comparison panel -->
-          <div class="border border-ink/10 rounded-lg p-6 bg-ink/[0.02]">
-            <h3 class="font-display text-lg font-medium mb-1">AI comparison</h3>
-            <p class="text-xs text-ink/50 mb-4">
-              The model is asked to identify meaningful differences, not just bigger/smaller numbers.
-            </p>
-            <button x-show="!llmText && !llmStreaming"
-                    @click="explainComparison()"
-                    :disabled="!llmReady"
-                    class="px-4 py-2.5 bg-ink text-paper rounded text-sm hover:bg-accent transition disabled:bg-ink/20 disabled:cursor-not-allowed">
-              Compare these reports
-            </button>
-            <div x-show="llmStreaming || llmText"
-                 class="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap"
-                 x-html="llmText"></div>
-          </div>
+          <h3 class="font-display text-xl font-medium mt-10 mb-3">
+            The AI interpretation layer
+          </h3>
+          <p class="text-sm text-ink/70 mb-2">
+            AI interpretations are powered by
+            <span class="font-medium text-ink">Groq's llama-3.3-70b-versatile</span>
+            via the Groq API. For each request, the relevant metrics are serialised
+            into a structured block and sent with a system prompt instructing the model
+            to be concise, honest about uncertainty, and grounded only in the data shown.
+          </p>
+          <p class="text-sm text-ink/70">
+            Three prompt types are used: single-target interpretation (project, package,
+            or class), side-by-side comparison of two targets, and free-form follow-up
+            questions. The exact prompt is always visible via the "Show prompt sent to
+            the model" toggle.
+          </p>
+        </section>
+      </main>
+    </div>
 
-          <button @click="resetCompare()" class="text-sm text-ink/50 hover:text-accent">
-            &larr; Compare different reports
-          </button>
-        </div>
-      </section>
-
-
-      <!-- ============ ABOUT VIEW ============ -->
-      <section x-show="view === 'about'" x-cloak class="prose-thesis max-w-3xl">
-        <h2 class="font-display text-4xl font-medium tracking-tight mb-6">About this tool</h2>
-
-        <p class="text-ink/70 text-lg mb-6">
-          A coverage report interpretation tool developed as part of a bachelor's
-          thesis on extending JaCoCo's standard metrics with derived measures
-          grounded in the software-testing literature, augmented by an LLM
-          interpretation layer and empirical validation against git bug-fix history.
-        </p>
-
-        <!-- Features -->
-        <h3 class="font-display text-xl font-medium mt-10 mb-3">What it does</h3>
-        <ul class="text-sm text-ink/70 space-y-2 list-disc pl-5">
-          <li><span class="font-medium text-ink">Single-report analysis</span> — upload a JaCoCo XML and get a full breakdown: composite quality score and grade (A–F), all derived metrics at project, package, class, and method level. Click any package or class to drill in.</li>
-          <li><span class="font-medium text-ink">Hotspot detection</span> — four risk categories (coverage gap risk, branch blind spots, shallow tests, untested complexity) automatically flag the classes most likely to harbour untested behaviour, filtered to classes with cyclomatic complexity &ge; 3.</li>
-          <li><span class="font-medium text-ink">Quality distribution</span> — histogram showing how classes spread across quality score buckets, so you can see whether low scores are isolated outliers or a systemic pattern.</li>
-          <li><span class="font-medium text-ink">Side-by-side comparison</span> — upload two JaCoCo XMLs to compare metrics between projects, or before and after a refactor, with per-metric delta highlighting.</li>
-          <li><span class="font-medium text-ink">Weight sensitivity analysis</span> — each composite weight is perturbed by &plusmn;0.10 and Spearman &rho; is computed between baseline and perturbed package rankings, answering how much the rankings depend on the chosen weights.</li>
-          <li><span class="font-medium text-ink">PDF report</span> — download a self-contained PDF of the full analysis, suitable for attaching to a review or thesis appendix.</li>
-          <li><span class="font-medium text-ink">AI interpretation</span> — any metric view can be sent to an LLM for a natural-language reading. The exact prompt is always inspectable via the "Show prompt" toggle.</li>
-        </ul>
-
-        <!-- Metrics -->
-        <h3 class="font-display text-xl font-medium mt-10 mb-3">The metrics</h3>
-        <div class="space-y-5 text-sm text-ink/70">
-
-          <div>
-            <div class="font-medium text-ink">Mean(line, branch) &mdash; used in quality score</div>
-            <p>Arithmetic mean of JaCoCo's line and branch coverage percentages. Surfaces
-            the common pathology of high line coverage paired with low branch coverage in a
-            single number. <span class="italic">Inozemtseva &amp; Holmes (ICSE 2014)
-            show that coverage types are highly correlated (Kendall &tau; &ge; 0.91 across
-            five large Java projects), so this metric is included for interpretability rather
-            than independent predictive strength.</span></p>
-          </div>
-
-          <div>
-            <div class="font-medium text-ink">Geometric mean of coverage dimensions &mdash; used in quality score</div>
-            <p>Geometric mean of three JaCoCo dimensions: instruction, branch, and line.
-            The geometric mean disproportionately punishes weakness in any single dimension —
-            if any one is very low, the whole score is dragged down. <span class="italic">METHOD
-            is intentionally excluded: JaCoCo's method counter includes compiler-generated
-            synthetic and bridge methods (generics, lambdas) that have no source lines,
-            which would penalise well-tested classes for compiler artefacts.
-            A design choice, not drawn from a specific paper.</span></p>
-          </div>
-
-          <div>
-            <div class="font-medium text-ink">Weighted line coverage &mdash; used in quality score</div>
-            <p>Line coverage weighted by the number of bytecode instructions per line.
-            A covered line containing a complex expression (many instructions) contributes
-            more than a trivial one-liner. A JaCoCo-compatible proxy for Statement Frequency
-            Coverage. <span class="italic">Aghamohammadi et al. (2021) define SFC using
-            runtime execution counts; JaCoCo does not record those. This metric substitutes
-            static instruction density as a coverage-thoroughness proxy — it is an
-            approximation, not SFC itself.</span></p>
-          </div>
-
-          <div>
-            <div class="font-medium text-ink">Branch density &mdash; display only, not in quality score</div>
-            <p>Total branches divided by total lines for a class. A structural property, not
-            a coverage metric — it contextualises branch coverage results. High branch
-            coverage in a high-density class is more meaningful than the same percentage
-            in a trivial utility class.</p>
-          </div>
-
-          <div>
-            <div class="font-medium text-ink">Quality score &mdash; the composite</div>
-            <p>Weighted combination of the three coverage-derived metrics:</p>
-            <p class="font-mono text-xs mt-1 p-2 bg-ink/[0.04] rounded">
-              0.35 &times; Mean(L,B) + 0.35 &times; Geo mean + 0.30 &times; Wtd line
-            </p>
-            <p class="mt-1">Rolled up from class to package and project via
-            <span class="font-medium text-ink">complexity-weighted averaging</span>: each
-            class's score is weighted by its cyclomatic complexity total. A package with one
-            large complex class scoring 60% and ten trivial classes scoring 100% reports
-            closer to 60%, not 96%. Grades A–F map to 90+, 80+, 70+, 60+, and below.</p>
-          </div>
-
-        </div>
-
-        <!-- LLM layer -->
-        <h3 class="font-display text-xl font-medium mt-10 mb-3">The AI interpretation layer</h3>
-        <p class="text-sm text-ink/70 mb-2">
-          AI interpretations are powered by
-          <span class="font-medium text-ink">Groq's llama-3.3-70b-versatile</span> via the
-          Groq API. For each request, the relevant metrics are serialised into a structured
-          block and sent with a system prompt instructing the model to be concise, honest
-          about uncertainty, and grounded only in the data shown — it is explicitly told not
-          to invent metrics.
-        </p>
-        <p class="text-sm text-ink/70">
-          Three prompt types are used: single-target interpretation (project / package /
-          class), side-by-side comparison of two targets, and free-form follow-up questions.
-          The exact prompt sent for any interpretation is always visible via the
-          "Show prompt sent to the model" toggle, which is a deliberate transparency choice
-          for the thesis methodology.
-        </p>
-
-        <!-- Empirical validation -->
-        <h3 class="font-display text-xl font-medium mt-10 mb-3">Empirical validation</h3>
-        <p class="text-sm text-ink/70 mb-2">
-          The tool includes a standalone correlation analysis script
-          (<span class="font-mono text-xs">analysis/bugfix_correlation.py</span>) that
-          correlates quality scores against bug-fix commit activity from a project's git
-          history. Applied to Apache Commons Lang (9,329 commits, 338 classes), the
-          composite <span class="font-mono text-xs">quality_score</span> achieved
-          Spearman &rho; = &minus;0.308 (p &lt; 0.001) against bug-fix commit counts —
-          roughly 83% stronger than raw JaCoCo line coverage (&rho; = &minus;0.168),
-          which lost statistical significance entirely on non-trivial classes (CC &ge; 10).
-        </p>
-        <p class="text-sm text-ink/70">
-          The sensitivity analysis (built into the web UI) found that package rankings under
-          all six &plusmn;0.10 weight perturbations maintained Spearman &rho; &ge; 0.993,
-          with a maximum rank shift of 1 position — confirming the composite is stable
-          under reasonable weight variation.
-        </p>
-
-        <!-- Honest limitations -->
-        <h3 class="font-display text-xl font-medium mt-10 mb-3">Honest limitations</h3>
-        <ul class="text-sm text-ink/70 list-disc pl-5 space-y-2">
-          <li>The composite score's weights (0.35 / 0.35 / 0.30) are theoretically motivated defaults, not empirically optimised against a labelled dataset.</li>
-          <li>Weighted line coverage uses static instruction density as a proxy for coverage thoroughness. True Statement Frequency Coverage (Aghamohammadi et al., 2021) requires runtime execution counts that JaCoCo does not record.</li>
-          <li>Mean(line, branch) is included for interpretability; Inozemtseva &amp; Holmes (ICSE 2014) show the different coverage types are highly correlated, so combining them adds limited independent predictive power.</li>
-          <li>The bug-fix correlation study uses a JaCoCo snapshot from the current build against the full git history. Classes that were poorly covered historically may have since been improved, which would underestimate the true correlation.</li>
-          <li>AI interpretations are generated by a general-purpose language model and are not validated against ground truth. They should be treated as a starting point for investigation, not as authoritative assessments.</li>
-        </ul>
-
-        <!-- References -->
-        <h3 class="font-display text-xl font-medium mt-10 mb-3">Key references</h3>
-        <ul class="text-xs text-ink/50 space-y-1.5 list-none pl-0">
-          <li>Inozemtseva, L. &amp; Holmes, R. (2014). Coverage is not strongly correlated with test suite effectiveness. <em>ICSE 2014.</em></li>
-          <li>Aghamohammadi, A., Farrokhzad, M., &amp; Parsa, S. (2021). Statement frequency coverage: A new coverage criterion. <em>Journal of Systems and Software.</em></li>
-          <li>Zakeri-Nasrabadi, M. &amp; Parsa, S. (2022). Coverageability: A new metric for predicting test coverage. <em>Information and Software Technology.</em></li>
-          <li>&#346;liwerski, J., Zimmermann, T., &amp; Zeller, A. (2005). When do changes induce fixes? <em>MSR 2005.</em> &mdash; basis for the bug-fix commit regex heuristic.</li>
-        </ul>
-      </section>
-
-    </main>
-
-  </div>
-
-  <script src="/static/app.js"></script>
-</body>
+    <script src="/static/app.js"></script>
+  </body>
 </html>
