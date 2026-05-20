@@ -522,11 +522,10 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        xml_path = r"d:\Projektas\commons-lang\target\site\jacoco\jacoco.xml"
-        out_dir  = r"d:\Projektas\commons-lang\quality_csv"
-    else:
-        xml_path = sys.argv[1]
-        out_dir  = sys.argv[2] if len(sys.argv) > 2 else "./quality_csv"
+        print("usage: python -m app.metrics <jacoco.xml> [output_dir]")
+        sys.exit(1)
+    xml_path = sys.argv[1]
+    out_dir  = sys.argv[2] if len(sys.argv) > 2 else "./quality_csv"
 
     results = analyze(xml_path)
     write_csv_outputs(results, out_dir)
