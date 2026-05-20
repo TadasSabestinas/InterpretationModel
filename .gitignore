@@ -1,7 +1,12 @@
-# Python
 .venv/
 __pycache__/
+.claude/
 *.py[cod]
 
 # Secrets never commit
 .env
+
+# Test/sample JaCoCo reports — not part of the app
+*.xml
+
+
