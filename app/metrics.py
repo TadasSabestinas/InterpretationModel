@@ -25,7 +25,7 @@ class Counter:
 
 @dataclass
 class LineHit:
-    """Per-line counters from <line nr="..." mi="..." ci="..." mb="..." cb="..."/>"""
+    #per-line counters from <line nr="..." mi="..." ci="..." mb="..." cb="..."/>
     line_no: int
     instr_covered: int   # ci
     instr_missed: int    # mi
@@ -190,7 +190,8 @@ def metric_geo_mean(counters: dict[str, Counter]) -> float:
     return round((product ** (1 / len(safe_dims))) * 100, 2)
 
 
-def metric_mean_method_coverage(methods: list[MethodEntry]) -> float: #unweighted mean of per-method instruction coverage.
+#unweighted mean of per-method instruction coverage
+def metric_mean_method_coverage(methods: list[MethodEntry]) -> float:
     if not methods:
         return 0.0
     pcts = [_safe_pct(m.counters, "INSTRUCTION") for m in methods]
@@ -387,6 +388,7 @@ def compute_hotspots(class_rows: list[dict]) -> dict:
     shallow = [_hspot(c, f"Instruction {c['instruction_pct']}% but method mean {c['mean_method_cov']}% (gap: {_gap(c)}pp), coverage concentrated in large methods")
                for c in shallow]
 
+    #untested complexity: large, risky classes where tests barely scratch the surface
     untested = sorted(
         [c for c in eligible if c["complexity_total"] >= 20 and c["quality_score"] < 70],
         key=lambda c: c["complexity_total"],
@@ -406,7 +408,7 @@ def compute_hotspots(class_rows: list[dict]) -> dict:
 
 
 def compute_distribution(class_rows: list[dict]) -> list[dict]:
-    """Bucket classes into ten 10-point quality_score ranges for the histogram view."""
+    #bucket classes into ten 10-point quality_score ranges for the histogram view
     buckets: list[dict] = []
     for i in range(10):
         lo = i * 10
@@ -491,6 +493,7 @@ def _analyze_project(project: ProjectReport) -> dict:
 
 
 def write_csv_outputs(results: dict, out_dir: str) -> None:
+    #write project, package, and class results to csv files (used by the standalone script)
     os.makedirs(out_dir, exist_ok=True)
 
     if results["project"]:

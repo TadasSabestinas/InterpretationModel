@@ -201,6 +201,7 @@ function app() {
       ];
     },
 
+    // maps grade letter to a tailwind badge colour class
     gradeColor(g) {
       const map = {
         'A': 'bg-green-100 text-green-800',
@@ -226,6 +227,7 @@ function app() {
       return `background-color: hsla(${hue}, 70%, 50%, 0.12)`;
     },
 
+    // draws a chart.js radar chart for the currently drilled class; destroys any previous instance first
     renderClassRadar() {
       const c = this.currentClass();
       if (!c) return;
@@ -266,6 +268,7 @@ function app() {
       });
     },
 
+    // builds the metric rows for the side-by-side comparison table
     compareMetrics() {
       if (!this.comparison) return [];
       const a = this.comparison.a.project;
@@ -282,6 +285,7 @@ function app() {
       ];
     },
 
+    // css class and formatted label for the Δ column cells
     compareDeltaClass(delta) {
       if (delta > 0.05)  return 'text-green-700 font-semibold';
       if (delta < -0.05) return 'text-red-700 font-semibold';
@@ -327,18 +331,21 @@ function app() {
       return (this.comparedPackages || []).filter(p => p.status === 'matched').length;
     },
 
+    // returns the visible slice of the active hotspot tab, limited to 20 unless expanded
     hotspotList() {
       const list = this.report?.hotspots?.[this.hotspotTab] ?? [];
       return this.hotspotExpanded ? list : list.slice(0, 20);
     },
 
 
+    // tallest bucket count, used to scale histogram bar heights proportionally
     distMaxCount() {
       const dist = this.report?.distribution;
       if (!dist) return 1;
       return Math.max(...dist.map(b => b.count), 1);
     },
 
+    // clears all llm panel state, called on view switch and drill navigation
     resetLlm() {
       this.llmText = '';
       this.llmPrompt = '';
@@ -358,6 +365,7 @@ function app() {
       if (pkg) await this.explainTarget(pkg, 'package');
     },
 
+    // sends both project reports to the llm and streams a side-by-side interpretation
     async explainComparison() {
       if (!this.comparison) return;
       const a = this.comparison.a.project;
@@ -370,6 +378,7 @@ function app() {
       });
     },
 
+    // appends a follow-up question to the ongoing llm conversation
     async askQuestion(target, level) {
       if (!this.userQuestion.trim() || !target) return;
       const q = this.userQuestion;

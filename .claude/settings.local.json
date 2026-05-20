@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"d:/Projektas/commons-lang\" -name \"jacoco*.xml\" -o -name \"*jacoco*.xml\" 2>/dev/null | head -20)",
+      "Read(//d/Projektas/commons-lang/**)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import sys; sys.stdout.buffer.write\\(sys.stdin.buffer.read\\(\\)\\)\")"
+    ]
+  }
+}

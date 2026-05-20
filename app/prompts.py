@@ -51,7 +51,7 @@ Composite:
 adds per-method uniformity. Penalises both low coverage and uneven \
 coverage across methods.
 - quality_grade: letter grade derived from quality_score \
-(A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 45, F < 45).
+(A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, F < 60).
 - complexity_total: sum of cyclomatic complexity across all methods \
 in the target. Higher values mean more paths to test.
 

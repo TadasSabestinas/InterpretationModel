@@ -1,11 +1,11 @@
 # JaCoCo Coverage Interpretation Tool
 
 A web application that parses JaCoCo XML reports, computes derived quality
-metrics, and uses an LLM to produce natural-language interpretations.
+metrics, displays changes within packages, classes, shows risky code areas and uses an LLM to produce natural-language interpretations.
 
 ## Features
 
-- Upload a JaCoCo XML and get a quality breakdown: composite score, grade (A–F),
+- Upload a JaCoCo XML and get a quality breakdown: composite score, grade (A-F),
   package rankings, class-level metrics, and hotspot detection
 - Side-by-side comparison of two JaCoCo reports
 - AI interpretation of any metric view via Groq's `llama-3.3-70b-versatile`
@@ -14,7 +14,7 @@ metrics, and uses an LLM to produce natural-language interpretations.
 ## Prerequisites
 
 - Python 3.10 or newer
-- A Groq API key (free) for AI features — the rest of the app works without it
+- A Groq API key (free) for AI features, the rest of the app works without it
 
 ## Setup
 
@@ -22,7 +22,7 @@ metrics, and uses an LLM to produce natural-language interpretations.
 # Create and activate a virtual environment
 python -m venv .venv
 .\.venv\Scripts\activate    # for windows
-source .venv/bin/activate       # for macOS / Linux
+source .venv/bin/activate       # for macOS/Linux
 
 # Install dependencies
 pip install -r requirements.txt
