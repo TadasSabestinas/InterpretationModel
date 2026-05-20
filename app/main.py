@@ -19,6 +19,7 @@ from app.prompts import (
     focused_question,
 )
 
+#groq is optional: the rest of the app works without it, only ai buttons are disabled
 try:
     from groq import Groq
     _groq_available = True
@@ -42,6 +43,7 @@ def _make_groq_client():
     return Groq(api_key=api_key)
 
 
+#groq model used for ai features
 LLM_MODEL = "llama-3.3-70b-versatile"
 
 app = FastAPI(title="JaCoCo Coverage Interpretation Model")
@@ -58,6 +60,7 @@ async def index():
 
 
 def _require_xml(filename: str | None) -> None:
+    #quick extension check before we spend any time trying to parse the file
     if not (filename or "").lower().endswith(".xml"):
         raise HTTPException(
             status_code=400,
@@ -66,6 +69,7 @@ def _require_xml(filename: str | None) -> None:
 
 
 def _parse_or_raise(content: bytes, label: str) -> dict:
+    #parse uploaded bytes and map every failure mode to a clean http error the ui can display
     try:
         results = analyze_bytes(content)
     except ET.ParseError:
@@ -115,6 +119,7 @@ async def api_compare(
     return JSONResponse({"a": results_a, "b": results_b})
 
 
+#request bodies for the three llm endpoints
 class ExplainRequest(BaseModel):
     target: dict
     level: str

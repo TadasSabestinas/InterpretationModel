@@ -182,7 +182,7 @@ def metric_geo_mean(counters: dict[str, Counter]) -> float:
         _safe_pct(counters, "BRANCH"),
         _safe_pct(counters, "LINE"),
     ]
-    eps = 1.0
+    eps = 1.0  #floor at 1% so a single zero dimension doesn't collapse the score to absolute zero
     safe_dims = [max(d, eps) for d in dims]
     product = 1.0
     for d in safe_dims:
@@ -344,11 +344,13 @@ def _hspot(row: dict, reason: str) -> dict:
 
 def compute_hotspots(class_rows: list[dict]) -> dict:
     #identify risky classes across four independent dimensions.
+    #complexity >= 3 filters out trivial classes like getters, constants, and empty stubs
     eligible = [c for c in class_rows if c["complexity_total"] >= 3]
 
     #coverage gap: classes lagging behind the project mean, ranked by risk
-    GAP_PP       = 10   # must be at least this many pp below the project mean
-    GAP_ABS_CEIL = 85   # must also be below this absolute score ceiling
+    #both conditions must hold: relatively weak AND below the absolute ceiling, so strong projects don't flag every class
+    GAP_PP       = 10   #must be at least this many pp below the project mean
+    GAP_ABS_CEIL = 85   #must also be below this absolute score ceiling
 
     if eligible:
         mean_score = sum(c["quality_score"] for c in eligible) / len(eligible)
